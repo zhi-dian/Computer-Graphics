@@ -1,0 +1,159 @@
+
+<body bgcolor=black>
+    <center>
+    <canvas id='canvas1' width=800 height=800></canvas>
+    
+    <script>
+   let N = 100;
+    // INITIALIZE GPU PROGRAM
+    
+    let start_gl = (canvas, meshData, vertexSize, vertexShader, fragmentShader) => {
+       let gl = canvas.getContext("webgl");
+       let program = gl.createProgram();
+       gl.program = program;
+       let addshader = (type, src) => {
+          let shader = gl.createShader(type);
+          gl.shaderSource(shader, src);
+          gl.compileShader(shader);
+          if (! gl.getShaderParameter(shader, gl.COMPILE_STATUS))
+             throw "Cannot compile shader:\n\n" + gl.getShaderInfoLog(shader);
+          gl.attachShader(program, shader);
+       };
+       addshader(gl.VERTEX_SHADER  , vertexShader  );
+       addshader(gl.FRAGMENT_SHADER, fragmentShader);
+       gl.linkProgram(program);
+       if (! gl.getProgramParameter(program, gl.LINK_STATUS))
+          throw "Could not link the shader program!";
+       gl.useProgram(program);
+       gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+       gl.enable(gl.DEPTH_TEST);
+       gl.depthFunc(gl.LEQUAL);
+       let vertexAttribute = (name, size, position) => {
+          let attr = gl.getAttribLocation(program, name);
+          gl.enableVertexAttribArray(attr);
+          gl.vertexAttribPointer(attr, size, gl.FLOAT, false, vertexSize * 4, position * 4);
+       }
+       vertexAttribute('aPos', 3, 0);
+       return gl;
+    }
+    
+    // LOGIC TO TRACK THE CURSOR
+   
+   let r = canvas1.getBoundingClientRect(), cursor = [0,0,0];
+   let setCursor = (e, z) => cursor = [ (e.clientX - r.left) / canvas1.width * 2 - 1,
+                                       1 - (e.clientY - r.top) / canvas1.height * 2,
+                                       z !== undefined ? z : cursor[2] ];
+   canvas1.onmousedown = e => setCursor(e, 1);
+   canvas1.onmousemove = e => setCursor(e,  );
+   canvas1.onmouseup   = e => setCursor(e, 0);
+   
+   // TRIANGLE DATA (IN THIS CASE, ONE SQUARE)
+   
+   let meshData = [
+      { type: 1, mesh: new Float32Array([ -1,1,0, 1,1,0, -1,-1,0, 1,-1,0 ]) },
+   ];
+   
+   // SET NUMBER OF LIGHTS AND NUMBER OF SPHERES IN THE SCENE
+   
+   
+   // VERTEX AND FRAGMENT SHADERS
+   
+   let vertexSize = 3;
+   let vertexShader = `
+      attribute vec3 aPos;
+      varying   vec3 vPos;
+      void main() {
+         gl_Position = vec4(aPos, 1.0);
+         vPos = aPos;
+      }
+   `;
+   let fragmentShader = `
+      precision mediump float;
+   
+      uniform float uTime, uFL;
+      uniform int uN;
+      uniform vec3  uCursor;
+   
+      varying vec3  vPos;
+   
+      vec3 bgColor = vec3(0.,0.,.0);
+   
+   void main(void) {
+
+      // SET BACKGROUND COLOR
+
+      vec3 color = bgColor;
+      
+      vec3 light = vec3(1.,0.,0.);
+      float posx = -1.;
+      float w = 0.1;
+      float upd = 2./float(`+N+`);
+
+         for(int i = 1;i<=`+N+`;i++){
+            if(abs(vPos.x-posx)<w){
+               color = mix(color,light,.1);
+            }
+            posx += upd;
+
+            float xx = float(i)*upd;
+            light.r = max(1.-xx,0.);
+            light.g = max(1.-abs(-xx+1.),0.);
+            light.b = max(max(0.,xx-.5),0.);
+
+            // light.r = max(1.-xx*xx,0.);
+            // light.g = max(1.-abs((-xx+1.)*(-xx+1.)),0.);
+            // light.b = max(max(0.,xx*xx-.5),0.);
+
+         }
+      //  color = mix(color, vPos.xyz, upd/2.);
+   
+         gl_FragColor = vec4(sqrt(color), 1.);
+      }
+   `;
+   
+    // WAIT 100 MSECS BEFORE STARTING UP
+    
+    setTimeout(() => {
+       let gl = start_gl(canvas1, meshData, vertexSize, vertexShader, fragmentShader);
+    
+       // INITIALIZE POSITION, VELOCITY AND PHONG PARAMETERS OF EACH SPHERE
+    
+
+       // FIND LOCATIONS IN GPU PROGRAM OF UNIFORM VARIABLES
+    
+       let uFL       = gl.getUniformLocation(gl.program, "uFL"      );
+       let uN        = gl.getUniformLocation(gl.program, "uN"    );
+       let uTime     = gl.getUniformLocation(gl.program, "uTime"    );
+       let uCursor   = gl.getUniformLocation(gl.program, "uCursor"  ); 
+       let uLC       = gl.getUniformLocation(gl.program, "uLC"      ); 
+       let uLD       = gl.getUniformLocation(gl.program, "uLD"      ); 
+
+       // ANIMATE AND RENDER EACH ANIMATION FRAME
+    
+       let startTime = Date.now() / 1000;
+       setInterval(() => {
+          
+
+    
+          // SET ALL UNIFORM VARIABLES
+    
+          gl.uniform1f(uTime, Date.now() / 1000 - startTime);
+          gl.uniform1f(uN, N);
+          gl.uniform3fv(uCursor, cursor);
+          gl.uniform1f(uFL, 3);
+          let r3 = Math.sqrt(1/3);
+          gl.uniform3fv(uLC, [1,1,1,      .3,.2,.1]);
+          gl.uniform3fv(uLD, [r3,r3,r3, -r3,-r3,-r3]);
+    
+          // RENDER THE FRAME
+    
+          for (let n = 0 ; n < meshData.length ; n++) {
+             let mesh = meshData[n].mesh;
+             gl.bufferData(gl.ARRAY_BUFFER, mesh, gl.STATIC_DRAW);
+             gl.drawArrays(meshData[n].type ? gl.TRIANGLE_STRIP : gl.TRIANGLES, 0, mesh.length / vertexSize);
+          }
+       }, 30);
+    }, 100);
+    </script>
+    
+    

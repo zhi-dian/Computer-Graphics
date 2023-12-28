@@ -1,0 +1,38 @@
+<body bgcolor=blue>
+<center>
+<canvas id=canvas1 width=500 height=500></canvas>
+<script>
+let w = canvas1.width;
+let h = canvas1.height;
+let ctx = canvas1.getContext('2d');
+ctx.fillStyle = 'white';
+ctx.fillRect(0,0,w,h);
+
+ctx.fillStyle = 'green';
+ctx.beginPath();
+ctx.moveTo(100,100);
+ctx.lineTo(200,200);
+ctx.lineTo(100,300);
+ctx.lineTo(0,200);
+ctx.fill();
+
+ctx.lineCap = 'round';
+ctx.lineWidth = 20;
+ctx.strokeStyle = 'black';
+ctx.beginPath();
+ctx.moveTo(100,100);
+ctx.lineTo(200,200);
+ctx.lineTo(100,300);
+ctx.stroke();
+
+ctx.lineWidth = 4;
+ctx.strokeStyle = 'black';
+ctx.fillStyle = '#a0b0c0';
+ctx.font = '100px Arial';
+ctx.fillText('this is my text', 300,300);
+ctx.strokeText('this is my text', 300,300);
+
+</script>
+
+</center>
+</body>

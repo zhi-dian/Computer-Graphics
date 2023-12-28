@@ -1,0 +1,95 @@
+<body bgcolor=blue>
+<center>
+<input type=range id=slider1 oninput=callback()>
+<br>
+<canvas id=canvas1 width=500 height=500></canvas>
+<script>
+let w = canvas1.width;
+let h = canvas1.height;
+let ctx = canvas1.getContext('2d');
+
+// DRAW A LINE IN RESPONSE TO CANVAS MOUSE EVENTS
+
+let myLine = [];
+canvas1.onmouseup   = e => canvas1.isDown = false;
+canvas1.onmousedown = e => canvas1.isDown = true;
+canvas1.onmousemove = e => {
+   if (canvas1.isDown) {
+      let r = canvas1.getBoundingClientRect();
+      myLine.push([e.x - r.left, e.y - r.top]);
+   }
+}
+
+// IMPLEMENT ZOOM IN RESPONSE TO SLIDER VALUE
+
+let zoom = 1;
+let callback = () => zoom = 1 + slider1.value / 50;
+
+// VARIABLES USED TO IMPLEMENT GRAVITY AND BOUNCING
+
+let height = 0, prevHeight = 0;
+let velocity = 0;
+let gravity = 1;
+
+setInterval(() => {
+   ctx.fillStyle = 'white';
+   ctx.fillRect(0,0,w,h);
+
+//  The 6 args of     STRUCTURE OF THE
+//  setTransform:     RESULTING MATRIX:
+//
+//     0 2 4              c s tx
+//     1 3 5             -s c ty
+//                        0 0 1
+
+   // ROTATING SQUARE
+
+   ctx.save();
+      let time = Date.now() / 1000;
+      let c = zoom * Math.cos(time/2);
+      let s = zoom * Math.sin(time/2);
+      ctx.setTransform(c,-s, s,c, w/2,h/2 + height);
+      ctx.fillStyle = 'black';
+      ctx.fillRect(-100,-100,200,200);
+/*
+      // ADD A NESTED ROTATING SQUARE
+
+      ctx.save();
+         let cc = Math.cos(2*time);
+         let ss = Math.sin(2*time);
+         ctx.setTransform(cc,-ss, ss,cc, 200,200);
+         ctx.fillStyle = 'red';
+         ctx.fillRect(-50,-50,100,100);
+      ctx.restore();
+*/
+      // ADD A TEXT MESSAGE
+
+      ctx.fillStyle = 'white';
+      ctx.font = '20px Arial';
+      ctx.fillText('I am rotating', -50, 0);
+
+   ctx.restore();
+
+   // ADD GRAVITY AND BOUNCING TO THE SQUARE
+
+   prevHeight = height;
+   velocity += gravity;
+   height += velocity;
+   if (prevHeight <= 150 && height > 150)
+      velocity = -1.06 * velocity;
+
+   // RENDER THE INTERACTIVE LINE DRAWING
+
+   if (myLine.length > 0) {
+      ctx.strokeStyle = 'red';
+      ctx.lineCap = 'round';
+      ctx.lineWidth = 10;
+      ctx.moveTo(myLine[0][0], myLine[0][1]);
+      for (let i = 1 ; i < myLine.length ; i++)
+         ctx.lineTo(myLine[i][0], myLine[i][1]);
+      ctx.stroke();
+   }
+
+}, 30); // ITERATE EVERY 30 MILLISECONDS
+
+</script>

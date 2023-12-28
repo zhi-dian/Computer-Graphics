@@ -1,0 +1,270 @@
+<body bgcolor=black>
+<center>
+<canvas id='canvas1' width=500 height=500></canvas>
+
+<script>
+let mIdentity = () => [ 1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1 ];
+
+let mInverse = m => {
+   let dst = [], det = 0, cofactor = (c, r) => {
+      let s = (i, j) => m[c+i & 3 | (r+j & 3) << 2];
+      return (c+r & 1 ? -1 : 1) * ( (s(1,1) * (s(2,2) * s(3,3) - s(3,2) * s(2,3)))
+                                  - (s(2,1) * (s(1,2) * s(3,3) - s(3,2) * s(1,3)))
+                                  + (s(3,1) * (s(1,2) * s(2,3) - s(2,2) * s(1,3))) );
+   }
+   for (let n = 0 ; n < 16 ; n++) dst.push(cofactor(n >> 2, n & 3));
+   for (let n = 0 ; n <  4 ; n++) det += m[n] * dst[n << 2]; 
+   for (let n = 0 ; n < 16 ; n++) dst[n] /= det;
+   return dst;
+}
+let matrixMultiply = (a, b) => {
+   let dst = [];
+   for (let n = 0 ; n < 16 ; n++)
+      dst.push(a[n&3]*b[n&12] + a[n&3|4]*b[n&12|1] + a[n&3|8]*b[n&12|2] + a[n&3|12]*b[n&12|3]);
+   return dst;
+}
+let mTranslate = (tx,ty,tz, m) => {
+   return matrixMultiply(m, [1,0,0,0, 0,1,0,0, 0,0,1,0, tx,ty,tz,1]);
+}
+let mRotateX = (theta, m) => {
+   let c = Math.cos(theta), s = Math.sin(theta);
+   return matrixMultiply(m, [1,0,0,0, 0,c,s,0, 0,-s,c,0, 0,0,0,1]);
+}
+let mRotateY = (theta, m) => {
+   let c = Math.cos(theta), s = Math.sin(theta);
+   return matrixMultiply(m, [c,0,-s,0, 0,1,0,0, s,0,c,0, 0,0,0,1]);
+}
+let mRotateZ = (theta, m) => {
+   let c = Math.cos(theta), s = Math.sin(theta);
+   return matrixMultiply(m, [c,s,0,0, -s,c,0,0, 0,0,1,0, 0,0,0,1]);
+}
+let mScale = (sx,sy,sz, m) => {
+   return matrixMultiply(m, [sx,0,0,0, 0,sy,0,0, 0,0,sz,0, 0,0,0,1]);
+}
+let mPerspective = (fl, m) => {
+   return matrixMultiply(m, [1,0,0,0, 0,1,0,0, 0,0,1,-1/fl, 0,0,0,1]);
+}
+let start_gl = (canvas, meshData, vertexSize, vertexShader, fragmentShader) => {
+   let gl = canvas.getContext("webgl");
+   let program = gl.createProgram();
+   gl.program = program;
+   let addshader = (type, src) => {
+      let shader = gl.createShader(type);
+      gl.shaderSource(shader, src);
+      gl.compileShader(shader);
+      if (! gl.getShaderParameter(shader, gl.COMPILE_STATUS))
+         throw "Cannot compile shader:\n\n" + gl.getShaderInfoLog(shader);
+      gl.attachShader(program, shader);
+   };
+   addshader(gl.VERTEX_SHADER  , vertexShader  );
+   addshader(gl.FRAGMENT_SHADER, fragmentShader);
+   gl.linkProgram(program);
+   if (! gl.getProgramParameter(program, gl.LINK_STATUS))
+      throw "Could not link the shader program!";
+   gl.useProgram(program);
+   gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+   gl.enable(gl.DEPTH_TEST);
+   gl.depthFunc(gl.LEQUAL);
+   let vertexAttribute = (name, size, position) => {
+      let attr = gl.getAttribLocation(program, name);
+      gl.enableVertexAttribArray(attr);
+      gl.vertexAttribPointer(attr, size, gl.FLOAT, false, vertexSize * 4, position * 4);
+   }
+   vertexAttribute('aPos', 3, 0);
+   return gl;
+}
+
+let r = canvas1.getBoundingClientRect(), cursor = [0,0,0];
+let setCursor = (e, z) => cursor = [ (e.clientX - r.left) / canvas1.width * 2 - 1,
+                                     1 - (e.clientY - r.top) / canvas1.height * 2,
+                                     z !== undefined ? z : cursor[2] ];
+canvas1.onmousedown = e => setCursor(e, 1);
+canvas1.onmousemove = e => setCursor(e,  );
+canvas1.onmouseup   = e => setCursor(e, 0);
+
+
+let createMesh = (nu, nv, p) => {
+   let mesh = [];
+   for (let j = nv ; j > 0 ; j--) {
+      for (let i = 0 ; i <= nu ; i++)
+         mesh.push(p(i/nu,j/nv), p(i/nu,j/nv-1/nv));
+      mesh.push(p(1,j/nv-1/nv), p(0,j/nv-1/nv));
+   }
+   return mesh.flat();
+}
+
+
+// let sphere = (nu, nv) => createMesh(nu, nv, (u,v) => {
+//    let theta = 2 * Math.PI * u;
+//    let phi = Math.PI * (v - .5);
+//    let x = Math.cos(phi) * Math.cos(theta),
+//        y = Math.cos(phi) * Math.sin(theta),
+//        z = Math.sin(phi);
+//    return [ x,y,z, x,y,z ];
+// });
+
+let sphere = (nu,nv) => {
+   let mesh = [];
+   let p = (u,v) => {
+      let theta = 2 * Math.PI * u;
+      let phi = Math.PI * (v - .5);
+      let x = Math.cos(phi) * Math.cos(theta),
+          y = Math.cos(phi) * Math.sin(theta),
+          z = Math.sin(phi);
+      return [ x,y,z, x,y,z ];
+   }
+   for (let j = 0 ; j < nv ; j++)
+   for (let i = 0 ; i < nu ; i++) {
+      let u = i/nu, v = j/nv;
+      let p00 = p(u     , v     );
+      let p10 = p(u+1/nu, v     );
+      let p01 = p(u     , v+1/nv);
+      let p11 = p(u+1/nu, v+1/nv);
+      mesh.push(p00, p10, p11);
+      mesh.push(p11, p01, p00);
+   }
+   return mesh.flat();
+}
+
+let tube = (nu, nv) => createMesh(nu, nv, (u,v) => {
+   let theta = 2 * Math.PI * u;
+   let x = Math.cos(theta),
+       y = Math.sin(theta),
+       z = 2 * v - 1;
+   return [ x,y,z, x,y,0 ];
+});
+
+let cylinder = (nu, nv) => createMesh(nu, nv, (u,v) => {
+   let theta = 2 * Math.PI * u;
+   let x = Math.cos(theta),
+       y = Math.sin(theta);
+   switch (5 * v >> 0) {
+   case 0: return [ 0,0,-1, 0,0,-1 ];
+   case 1: return [ x,y,-1, 0,0,-1 ];
+   case 2: return [ x,y,-1, x,y, 0 ];
+   case 3: return [ x,y, 1, x,y, 0 ];
+   case 4: return [ x,y, 1, 0,0, 1 ];
+   case 5: return [ 0,0, 1, 0,0, 1 ];
+   }
+});
+
+
+let meshData = [
+   // { type: 1, mesh: new Float32Array([ -1,1,0, 1,1,0, -1,-1,0, 1,-1,0 ]) },
+   // { type: 0, mesh: new Float32Array(sphere(20,20)) },
+   { type: 1, color: [1.,1.,.1], mesh: new Float32Array(cylinder(20, 10)), scal: [.51,.51,.1], trans: [0.,0.,-.6], col: 0},
+   { type: 1, color: [1.,1.,.1], mesh: new Float32Array(cylinder(20, 10)), scal: [.51,.51,.1], trans: [0.,0.,.6], col: 0},
+   { type: 1, color: [.1,1.,.1], mesh: new Float32Array(tube(20, 1)), scal: [.5,.5,.7], trans: [0.,0.,0.], col: 1 },
+   // { type: 1, color: [.1,1.,.1], mesh: new Float32Array(tube(20, 1))},
+];
+
+let vertexSize = 6;
+let vertexShader = `
+   attribute vec3 aPos, aNor;
+   uniform mat4 uMatrix, uInvMatrix;
+   varying vec3 vPos, vNor, vaPos;
+   void main() {
+      vaPos = aPos;
+      vec4 pos = uMatrix * vec4(aPos, 1.0);
+      vec4 nor = vec4(aNor, 0.0) * uInvMatrix;
+      vPos = pos.xyz;
+      vNor = nor.xyz;
+      gl_Position = pos * vec4(1.,1.,-.1,1.);
+   }
+`;
+let fragmentShader = `
+precision mediump float;
+
+float noise(vec3 point) { float r = 0.; for (int i=0;i<16;i++) {
+  vec3 D, p = point + mod(vec3(i,i/4,i/8) , vec3(4.0,2.0,2.0)) +
+       1.7*sin(vec3(i,5*i,8*i)), C=floor(p), P=p-C-.5, A=abs(P);
+  C += mod(C.x+C.y+C.z,2.) * step(max(A.yzx,A.zxy),A) * sign(P);
+  D=34.*sin(987.*float(i)+876.*C+76.*C.yzx+765.*C.zxy);P=p-C-.5;
+  r+=sin(6.3*dot(P,fract(D)-.5))*pow(max(0.,1.-2.*dot(P,P)),4.);
+} return .5 * sin(r); }
+
+float turbulence(vec3 P) {
+   float f = 0., s = 1.;
+   for (int i = 0 ; i < 6 ; i++) {
+      f += abs(noise(s * P)) / s;
+      s *= 2.;
+      P = vec3(.866*P.x + .5*P.z, P.y + 100., -.5*P.x + .866*P.z);
+   }
+   return f;
+}
+
+uniform float uTime;
+uniform vec3  uCursor;
+varying vec3  vPos;
+uniform float uCol;
+
+void main(void) {
+   vec3 color = vec3(.8,.1,.1);
+   float y = vPos.y;
+
+   float u = .1;
+   // y += turbulence(vec3(vPos.xyz) + vec3(0.,0.,0.)); 
+   u += turbulence(1.*vPos + vec3(.1,0.,uTime*.02 + max(-.05*sin(5.*uTime),.1*sin(5.*uTime))));
+   
+   // y = turbulence(vPos + vec3(.1*uTime,0.,.1*uTime));
+   // y = turbulence(vPos + vec3(0.,0.,0.));
+
+   // color = mix(color, vec3(.1), y);
+   // y += .1;
+   color = mix(color, vec3(.1), u>.9?1.:u/.75);
+   
+   color = mix(color, vec3(.5,.1,.1), u<.2?u/.9:.1);
+
+   color = uCol * color + (1. - uCol) * vec3(1.,1.,1.);
+   // color = mix(color, color, u>.9?1.:0.);
+   gl_FragColor = vec4(color,1.);
+}
+`;
+
+// WAIT 100 MSECS BEFORE STARTING UP
+
+setTimeout(() => {
+   let gl = start_gl(canvas1, meshData, vertexSize, vertexShader, fragmentShader);
+   let uTime   = gl.getUniformLocation(gl.program, "uTime"  );
+   let uCursor = gl.getUniformLocation(gl.program, "uCursor"); 
+   let uCol = gl.getUniformLocation(gl.program, "uCol"); 
+
+   let uMatrix    = gl.getUniformLocation(gl.program, "uMatrix");
+   let uInvMatrix = gl.getUniformLocation(gl.program, "uInvMatrix");
+   let startTime = Date.now() / 1000;
+   setInterval(() => {
+      gl.uniform1f (uTime, Date.now() / 1000 - startTime);
+      //gl.uniform3fv(uCursor, cursor);
+      let time = Date.now() / 1000 - startTime;
+
+
+      for (let n = 0 ; n < meshData.length ; n++) {
+         let m = mIdentity();
+         // m = mPerspective(3, m);
+         m = mRotateX(time, m);
+         m = mRotateZ(time, m);
+      
+         // let c = .5 * Math.cos(2 * Math.PI * n / meshData.length);
+         // let s = .5 * Math.sin(2 * Math.PI * n / meshData.length);
+         m = mTranslate(meshData[n].trans[0],meshData[n].trans[1],meshData[n].trans[2], m);
+         m = mScale(meshData[n].scal[0],meshData[n].scal[1],meshData[n].scal[2], m);
+         // m = mScale(.7,.7,.7, m);
+
+         // gl.uniform3fv      (uColor    , meshData[n].color);
+         gl.uniformMatrix4fv(uMatrix   , false, m);
+         gl.uniformMatrix4fv(uInvMatrix, false, mInverse(m));
+         gl.uniform1f(uCol,meshData[n].col);
+
+         let mesh = meshData[n].mesh;
+         gl.bufferData(gl.ARRAY_BUFFER, mesh, gl.STATIC_DRAW);
+         gl.drawArrays(meshData[n].type ? gl.TRIANGLE_STRIP : gl.TRIANGLES, 0, mesh.length / vertexSize);
+      }
+   }, 30);
+}, 100);
+</script>
+
+
+
+
+
+

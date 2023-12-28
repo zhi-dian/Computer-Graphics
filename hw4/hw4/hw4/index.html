@@ -1,0 +1,349 @@
+<body bgcolor=white>
+   <style>
+      .sidenav {
+        height: 100%;
+        width: 200px; 
+        position: fixed; 
+        z-index: 1;
+        top: 0; 
+        left: 0;
+        background-color: #77ccff; 
+        overflow-x: hidden; 
+        padding-top: 20px;
+      }
+      
+      .sidenav a {
+        padding: 6px 8px 6px 16px;
+        text-decoration: none;
+        font-size: 20px;
+        color: #000000;
+        display: block;
+      }
+      
+      </style>
+      <div class="sidenav">
+         Variant DNA
+         <br>
+         <br>
+         <br>
+         
+         Molecules are vibrating, but they store the code of life.
+         <br>
+         <br>
+         Colors represent the pair of A-T(U), C-G (something wrong with rendering)
+      <br>
+      </div>
+<center>
+<canvas id='canvas1' width=500 height=500></canvas>
+
+<script>
+
+// INITIALIZE GPU PROGRAM
+
+let start_gl = (canvas, meshData, vertexSize, vertexShader, fragmentShader) => {
+   let gl = canvas.getContext("webgl");
+   let program = gl.createProgram();
+   gl.program = program;
+   let addshader = (type, src) => {
+      let shader = gl.createShader(type);
+      gl.shaderSource(shader, src);
+      gl.compileShader(shader);
+      if (! gl.getShaderParameter(shader, gl.COMPILE_STATUS))
+         throw "Cannot compile shader:\n\n" + gl.getShaderInfoLog(shader);
+      gl.attachShader(program, shader);
+   };
+   addshader(gl.VERTEX_SHADER  , vertexShader  );
+   addshader(gl.FRAGMENT_SHADER, fragmentShader);
+   gl.linkProgram(program);
+   if (! gl.getProgramParameter(program, gl.LINK_STATUS))
+      throw "Could not link the shader program!";
+   gl.useProgram(program);
+   gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+   gl.enable(gl.DEPTH_TEST);
+   gl.depthFunc(gl.LEQUAL);
+   let vertexAttribute = (name, size, position) => {
+      let attr = gl.getAttribLocation(program, name);
+      gl.enableVertexAttribArray(attr);
+      gl.vertexAttribPointer(attr, size, gl.FLOAT, false, vertexSize * 4, position * 4);
+   }
+   vertexAttribute('aPos', 3, 0);
+   return gl;
+}
+
+// LOGIC TO TRACK THE CURSOR
+
+let r = canvas1.getBoundingClientRect(), cursor = [0,0,0];
+let setCursor = (e, z) => cursor = [ (e.clientX - r.left) / canvas1.width * 2 - 1,
+                                     1 - (e.clientY - r.top) / canvas1.height * 2,
+                                     z !== undefined ? z : cursor[2] ];
+canvas1.onmousedown = e => setCursor(e, 1);
+canvas1.onmousemove = e => setCursor(e,  );
+canvas1.onmouseup   = e => setCursor(e, 0);
+
+// TRIANGLE DATA (IN THIS CASE, A SQUARE)
+
+let meshData = [
+   { type: 1, mesh: new Float32Array([ -1,1,0, 1,1,0, -1,-1,0, 1,-1,0 ]) },
+];
+
+let matrixIdentity = () => [ 1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1 ];
+
+let matrixMultiply = (a, b) => {
+   let dst = [];
+   for (let n = 0 ; n < 16 ; n++)
+      dst.push(a[n&3]*b[n&12] + a[n&3|4]*b[n&12|1] + a[n&3|8]*b[n&12|2] + a[n&3|12]*b[n&12|3]);
+   return dst;
+}
+
+let mTranslate = (tx,ty,tz, m) => {
+   return matrixMultiply([1,0,0,0, 0,1,0,0, 0,0,1,0, tx,ty,tz,1], m);
+}
+
+let mRotateX = (theta, m) => {
+   let t = theta * Math.PI / 180;
+   let c = Math.cos(t), s = Math.sin(t);
+
+   return matrixMultiply([1,0,0,0, 0,c,s,0, 0,-s,c,0, 0,0,0,1], m);
+}
+
+let mRotateY = (theta, m) => {
+   let t = theta * Math.PI / 180;
+   let c = Math.cos(t), s = Math.sin(t);
+
+   return matrixMultiply([c,0,-s,0, 0,1,0,0, s,0,c,0, 0,0,0,1], m);
+}
+
+let mRotateZ = (theta, m) => {
+   let t = theta * Math.PI / 180;
+   let c = Math.cos(t), s = Math.sin(t);
+
+   return matrixMultiply([c,s,0,0, -s,c,0,0, 0,0,1,0, 0,0,0,1], m);
+}
+
+let mScale = (sx,sy,sz, m) => {
+   return matrixMultiply([sx,0,0,0, 0,sy,0,0, 0,0,sz,0, 0,0,0,1], m);
+}
+
+// VERTEX AND FRAGMENT SHADERS
+
+let MAX_SPHERES = 15;
+
+let vertexSize = 3;  
+let vertexShader = `
+   attribute vec3 aPos;
+   varying   vec3 vPos;
+   void main() {
+      gl_Position = vec4(aPos, 1.0);
+      vPos = aPos;
+   }
+`;
+let fragmentShader = `
+   precision mediump float;
+
+   uniform float uTime, uFL;
+   uniform vec3  uCursor;
+   uniform vec3  uC[`+23*MAX_SPHERES+`];
+   uniform vec4  uS[`+23*MAX_SPHERES+`];
+
+   varying vec3  vPos;
+
+   float raySphere(vec3 V, vec3 W, vec4 S) {
+      vec3 C = S.xyz;
+      float r = S.w;
+
+      vec3 Vp = V - C;
+      float b = dot(Vp,W);
+      float c = dot(Vp,Vp) - r*r;
+      float d = b*b - c;
+      return d > 0. ? -b - sqrt(d) : -1.;
+   }
+
+   vec3 shadeSphere(vec4 S, vec3 P, vec3 L, vec3 color) {
+      vec3 C = S.xyz;
+      float r = S.w;
+
+      vec3 N = (P - C) / r;
+      return color * (vec3(.02,.02,.1) + vec3( .9 * max(0., dot(N, L)) ));
+   }
+
+   void main(void) {
+
+      // SET BACKGROUND COLOR
+
+      vec3 color = vec3(0.,0.,.1);
+
+      // DEFINE A LIGHT DIRECTION
+
+      vec3 L = normalize(vec3(1.,1.,1.));
+
+      // FORM THE RAY FOR THIS PIXEL
+
+      vec3 V = vec3(0.,0.,uFL);
+      vec3 W = normalize(vec3(vPos.xy,-uFL));
+
+      // RAY TRACE TO EACH SPHERE, CHOOSING THE NEAREST ONE
+
+      float tMin = 1000.;
+      for (int n = 0 ; n < `+23*MAX_SPHERES+` ; n++) {
+//       if (n >= 2)
+//          break;
+         float t = raySphere(V, W, uS[n]);
+         if (t > 0. && t < tMin) {
+            color = shadeSphere(uS[n], V + t * W, L, uC[n]);
+            tMin = t;
+         }
+      }
+
+      gl_FragColor = vec4(sqrt(color), 1.);
+   }
+`;
+
+// WAIT 100 MSECS BEFORE STARTING UP
+
+
+let idx = [3,2,0,1];
+setTimeout(() => {
+   let gl = start_gl(canvas1, meshData, vertexSize, vertexShader, fragmentShader);
+
+   // INITIALIZE POSITION, VELOCITY AND COLOR OF EACH SPHERE
+
+   let V = [], OS = [], C = [], S = [];
+   for (let n = 0 ; n < 4*MAX_SPHERES ; n++){
+      let s = Math.sin(Math.floor(n/4)/2);
+      let c = Math.cos(Math.floor(n/4)/2);
+      if (n % 4 == 0) {
+         OS.push(-.2 * c);
+	      V.push(0);
+	      C.push(Math.floor(Math.random() * 4));
+      } else if (n % 4 == 1) {
+         OS.push(2 * Math.floor(n/4)/(MAX_SPHERES)-1);
+	      V.push(0);
+	      C.push(Math.floor(Math.random() * 4));
+      } else if (n % 4 == 2) {
+         OS.push(.2 * s);
+	      V.push(0); 
+	      C.push(Math.floor(Math.random() * 4));
+      }
+      else
+         OS.push(.04);
+      S.push(OS[n]); 
+
+   }
+
+   for (let n = 0 ; n < 4*MAX_SPHERES ; n++){
+      let s = Math.sin(Math.floor(n/4)/2);
+      let c = Math.cos(Math.floor(n/4)/2);
+      if (n % 4 == 0) {
+         OS.push(.2 * c);
+	      V.push(0);
+	      C.push(idx[C[n - Math.floor(n/4)]]);
+      } else if (n % 4 == 1) {
+         OS.push(2 * Math.floor(n/4)/(MAX_SPHERES)-1);
+	      V.push(0);
+	      C.push(idx[C[n- Math.floor(n/4)]]);
+      } else if (n % 4 == 2) {
+         OS.push(-.2 * s);
+	      V.push(0); 
+	      C.push(idx[C[n- Math.floor(n/4)]]);
+      }
+      else
+         OS.push(.04);  
+      S.push(OS[n + 4*MAX_SPHERES]); 
+      // C[n] = 0;
+   }
+
+   for (let n = 0 ; n < MAX_SPHERES ; n++){
+      for(let m = 0; m < 21; m++){
+         for(let k = 0;k < 4; k++){
+            // console.log(m);
+            let s = Math.sin((n/2));
+            let c = Math.cos((n/2));
+            if (k == 0) {
+               OS.push(.2 * c * (.1 * (m-10)));
+               V.push(0);
+               C.push(2);  
+            } else if (k == 1) {
+               // OS.push(n/(2*MAX_SPHERES)-1);
+               OS.push(2* n/(MAX_SPHERES)-1);
+               V.push(0);
+               C.push(2);
+            } else if (k == 2) {
+               OS.push(-.2 * s * (.1 * (m-10)));
+               V.push(0); 
+               C.push(2);
+            }
+            else
+               OS.push(.02);  
+            S.push(OS[84 * n + 4 * m + k + 8 * MAX_SPHERES]); 
+            // C[n] = 0;   
+         }
+      
+      }
+
+   }
+   // MAX_SPHERES = 2*MAX_SPHERES;
+   // FIND LOCATIONS IN GPU PROGRAM OF UNIFORM VARIABLES
+
+   let uFL     = gl.getUniformLocation(gl.program, "uFL"    );
+   let uTime   = gl.getUniformLocation(gl.program, "uTime"  );
+   let uCursor = gl.getUniformLocation(gl.program, "uCursor"); 
+   let uS      = gl.getUniformLocation(gl.program, "uS"     ); 
+   let uC      = gl.getUniformLocation(gl.program, "uC"     ); 
+
+   // ANIMATE AND RENDER EACH ANIMATION FRAME
+
+   let startTime = Date.now() / 1000;
+   setInterval(() => {
+      console.log(C[Date.now()%(MAX_SPHERES*6)]);
+      // HANDLE SPHERES BEHAVIOR FOR THIS ANIMATION FRAME
+      s = Math.sin(Date.now()/1000 - startTime);
+      c = Math.cos(Date.now()/1000 - startTime);
+
+      for (let n = 0 ; n < S.length; n++){
+         if (n % 4 != 3) { 
+            let idx = n-Math.floor(n/4);
+            V[idx] = .99 * V[idx] + .02 * (Math.random() - .5) + 3 * (OS[n] - S[n]);
+            if(n > 8 *MAX_SPHERES)
+               V[idx] = .69 * V[idx] + .01 * (Math.random() - .5) + .3 * (OS[n] - S[n]);
+            S[n] += .1 * V[idx];
+            // S[n] = OS[n] + V[n];
+            // if (Math.abs(S[n]) > 1)
+	      //  V[n] = -.1 * Math.sign(S[n]);
+         }
+         //want to create a rotating animation but not so easy
+         // if(n<MAX_SPHERES*4){
+         //    if (n%4 == 0){
+         //       OS[n] = .25 * c;
+         //    } else if (n%4 == 2){
+         //       OS[n] = -.25 * s;
+         //    }
+         // }else{
+         //    if (n%4 == 0){
+         //       OS[n] = -.25 * c;
+         //    } else if (n%4 == 2){
+         //       OS[n] = .25 * c;
+         //    }
+         // }
+      }
+         
+            
+
+      // SET ALL UNIFORM VARIABLES
+
+      gl.uniform1f(uTime, Date.now() / 1000 - startTime);
+      gl.uniform3fv(uCursor, cursor);
+      gl.uniform1f(uFL, 5);
+      gl.uniform4fv(uS, S);
+      gl.uniform3fv(uC, C);
+
+      // RENDER THE FRAME
+
+      for (let n = 0 ; n < meshData.length ; n++) {
+         let mesh = meshData[n].mesh;
+         gl.bufferData(gl.ARRAY_BUFFER, mesh, gl.STATIC_DRAW);
+         gl.drawArrays(meshData[n].type ? gl.TRIANGLE_STRIP : gl.TRIANGLES, 0, mesh.length / vertexSize);
+      }
+   }, 30);
+}, 100);
+</script>
+

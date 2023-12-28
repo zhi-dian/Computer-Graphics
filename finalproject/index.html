@@ -1,0 +1,32 @@
+<p style="color:black; font-size:2em;font-weight: bold;">
+    Final Project: Color Dispersion Simulation with Single Refractile Lens
+ </p>
+
+ <a href="final_version.html">Final Project</a><br>
+ 
+ Here I will go through my project process and experiment one by one.
+<br><br>
+Using spotlight can better understand the ray path and the math is simple.<br>
+ <img src=spotlight.jpg width=500><br>
+<a href="directlight.html">spot light source</a><br><br>
+
+Math for refraction<br>
+<img src=refraction.jpg width=500><br>
+To test the functionality, a good way is to change the height of the plane.
+If it is implemented correctly, the lighten area will move.<br>
+I also change the step() function to max() function, as it provides better 
+visual effects. <br>
+<a href="refract_step.html">refraction(step)</a>&nbsp;&nbsp;&nbsp;
+<a href="refract_max.html">refraction(max)</a><br><br>
+
+
+The next step is to decomposit the light color and create corresponding
+refraction index table. Here I first render a colorful stripes to finetune the parameters.<br>
+<img src=colorSampler.jpg width=500><br>
+<a href="exp2.html">rainbow</a><br><br>
+With the refraction index table on hands, I can further test the refraction.
+As we can see from the image that different color area will move with different distances.<br>
+<img src=multicolor.jpg width=500><br>
+<a href="refract_multicolor.html">multicolor_refraction(max)</a><br>
+Projects
+<a href="final_version.html">Final Project</a><br>

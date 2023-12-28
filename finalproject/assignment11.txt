@@ -1,0 +1,21 @@
+idea one:
+more light sources
+There are more light sources beyond spot light sources, and light are compound. In this project, I hope I can discover more characteristics about lights, and techniques to simulate it.
+There are a few targets and a few phases I set up.
+1. Achieve direct light source. There is a board and a direct light sources and only a ellipse area is lightened.
+2. Realize refraction with direct light sources. There will be a glass window with controlable refraction rate in addition to phase 1. We can move the glass to change the direction of light.
+3. Achieve compound light sources with two discrete colors, which will be refracted respectively. This will make the lightened area have two colors.
+4. Think of a method to continuize the color.
+5. Change the glass window to a lens. it requires making the refraction happens twice (in and out).
+6. generalize the whole process to make it simple to embed it into the ray tracing pipeline.
+
+idea two:
+a light weight modeling software
+two tracks:
+1. object inherence
+I want to find a way to implement the matrix stack on Thursday lecture in an interactive way. It will basically move the matrices to the mesh data array and multiply them in sequence when passing it to the shader. The user interface will be achieved by detecting the mouse position in 3D spaces using camera intrinsic and extrinsic. 
+2. meshpoint adding.
+I want to find a way to add points to a mesh interactively. 
+
+idea three:
+using noise to create mesh. 

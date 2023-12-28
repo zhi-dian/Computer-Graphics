@@ -1,0 +1,297 @@
+<body bgcolor=black>
+<center>
+<a href=https://www.khronos.org/files/webgl/webgl-reference-card-1_0.pdf>Reference card</a><p>
+<canvas id='canvas1' width=500 height=500></canvas>
+
+<script>
+/*
+   This index.html file is very similar to the one that I gave you last week for
+   homework 2.  The difference is that I am now defining a transformation matrix,
+   which I pass down at each animation frame to the vertex shader to transform
+   the rendered mesh shape.
+
+   Directly below this text you will see the beginnings of a matrix library.
+   I have already defined two helper functions: matrixIdentity and matrixMultiply.
+   I also got you started by defining the matrix translation function mTranslate.
+
+   When you run this index.html file in a Web browser, you will see that I am using
+   mTranslate to make the rendered square move around in a circular motion.
+
+   Homework 3 will be in two parts:
+
+   (1) Properly implement the mRotateX, mRotateY, mRotateZ and mScale functions,
+       which we defined in class this past week. For reference, you can review
+       those lectures are in the Zoom recordings. Hint: The general form of each
+       of these functions should look like my implementation of mTranslate below.
+       The only difference is the first argument that you pass into the
+       matrixMultiply function. Note that for each of these functions, the last
+       argument is a matrix, and the return value is a suitably modified matrix.
+
+   (2) Use a combination of mTranslate, mRotateX, mRotateY, mRotateZ and mScale
+       to animate your square in interesting ways. See if you can make the square
+       move and change over time in ways that are fun and surprising.
+*/
+
+//////////////////////////////////////////////////////////////////////////////////////
+///////////////////////// THE BEGINNINGS OF A MATRIX LIBRARY /////////////////////////
+
+let matrixIdentity = () => [ 1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1 ];
+
+let matrixMultiply = (a, b) => {
+   let dst = [];
+   for (let n = 0 ; n < 16 ; n++)
+      dst.push(a[n&3]*b[n&12] + a[n&3|4]*b[n&12|1] + a[n&3|8]*b[n&12|2] + a[n&3|12]*b[n&12|3]);
+   return dst;
+}
+
+let mTranslate = (tx,ty,tz, m) => {
+   return matrixMultiply([1,0,0,0, 0,1,0,0, 0,0,1,0, tx,ty,tz,1], m);
+}
+
+let mRotateX = (theta, m) => {
+   let t = theta * Math.PI / 180;
+   let c = Math.cos(t), s = Math.sin(t);
+
+   return matrixMultiply([1,0,0,0, 0,c,s,0, 0,-s,c,0, 0,0,0,1], m);
+}
+
+let mRotateY = (theta, m) => {
+   let t = theta * Math.PI / 180;
+   let c = Math.cos(t), s = Math.sin(t);
+
+   return matrixMultiply([c,0,-s,0, 0,1,0,0, s,0,c,0, 0,0,0,1], m);
+}
+
+let mRotateZ = (theta, m) => {
+   let t = theta * Math.PI / 180;
+   let c = Math.cos(t), s = Math.sin(t);
+
+   return matrixMultiply([c,s,0,0, -s,c,0,0, 0,0,1,0, 0,0,0,1], m);
+}
+
+let mScale = (sx,sy,sz, m) => {
+   return matrixMultiply([sx,0,0,0, 0,sy,0,0, 0,0,sz,0, 0,0,0,1], m);
+}
+
+//////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////
+
+
+// THIS FUNCTION DOES ALL OF THE INITIALIZING FOR THE GPU PROGRAM.
+
+let start_gl = (canvas, meshData, vertexSize, vertexShader, fragmentShader) => {
+
+   // GET THE 3D CONTEXT OF THE CANVAS
+
+   let gl = canvas.getContext("webgl");
+
+   // CREATE A PROGRAM THAT WILL RUN ON THE GPU
+
+   let program = gl.createProgram();
+   gl.program = program;
+
+   // THIS IS HOW WE COMPILE AND ATTACH A SHADER TO THE GPU PROGRAM
+
+   let addshader = (type, src) => {
+      let shader = gl.createShader(type);
+      gl.shaderSource(shader, src);
+      gl.compileShader(shader);
+      if (! gl.getShaderParameter(shader, gl.COMPILE_STATUS))
+         throw "Cannot compile shader:\n\n" + gl.getShaderInfoLog(shader);
+      gl.attachShader(program, shader);
+   };
+
+   // ADD THE VERTEX AND FRAGMENT SHADERS
+
+   addshader(gl.VERTEX_SHADER  , vertexShader  );
+   addshader(gl.FRAGMENT_SHADER, fragmentShader);
+
+   // LINK THE PROGRAM AND REPORT ANY ERRORS
+
+   gl.linkProgram(program);
+   if (! gl.getProgramParameter(program, gl.LINK_STATUS))
+      throw "Could not link the shader program!";
+   gl.useProgram(program);
+
+   // DECLARE A PLACE FOR MY VERTICES TO GO DOWN ON THE GPU
+
+   gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+
+   // PERMIT THE GPU TO RENDER NEARER THINGS IN FRONT OF FARTHER AWAY THINGS
+
+   gl.enable(gl.DEPTH_TEST);
+   gl.depthFunc(gl.LEQUAL);
+
+   // SET ANY ONE ATTRIBUTE OF A VERTEX
+
+   let vertexAttribute = (name, size, position) => {
+      let attr = gl.getAttribLocation(program, name);
+      gl.enableVertexAttribArray(attr);
+      gl.vertexAttribPointer(attr, size, gl.FLOAT, false, vertexSize * 4, position * 4);
+   }
+
+   // SET THE POSITION ATTRIBUTE
+
+   vertexAttribute('aPos', 3, 0);
+
+   return gl;
+}
+
+// HERE WE ARE SETTING UP HOW THE CANVAS RESPONDS TO MOUSE EVENTS.
+
+let r = canvas1.getBoundingClientRect(), cursor = [0,0,0];
+let setCursor = (e, z) => cursor = [ (e.clientX - r.left) / canvas1.width * 2 - 1,
+                                     1 - (e.clientY - r.top) / canvas1.height * 2,
+                                     z !== undefined ? z : cursor[2] ];
+canvas1.onmousedown = e => setCursor(e, 1);
+canvas1.onmousemove = e => setCursor(e,  );
+canvas1.onmouseup   = e => setCursor(e, 0);
+
+// ALL OF THE 3D MESH SHAPES THAT WE ARE RENDERING (FOR NOW IT'S JUST ONE SHAPE)
+
+let meshData = [
+   { type: 1, mesh: new Float32Array([ -1,1,0, 1,1,0, -1,-1,0, 1,-1,0 ]) },
+];
+
+// THE VERTEX SHADER, FOLLOWED BY THE FRAGMENT SHADER
+
+let vertexSize = 3;
+let vertexShader = `
+   attribute vec3 aPos;
+   uniform mat4  uMatrix;
+   varying   vec3 vPos;
+   void main() {
+      gl_Position = uMatrix * vec4(aPos, 1.0);
+      vPos = aPos;
+   }
+`;
+let fragmentShader = `
+   precision mediump float;
+   uniform float uTime;
+   uniform vec3  uCursor;
+   varying vec3  vPos;
+
+   // THIS IS A SIMPLE EXAMPLE OF IMPLEMENTING YOUR OWN FUNCTION.
+
+   vec3 makeItBrighter(vec3 color) {
+      return 2. * color;
+   }
+
+   void main(void) {
+
+      // HERE WE ARE JUST SETTING A DARK BLUE BACKGROUND.
+
+      vec3 color = vec3(0.,0.,.1);
+
+      // HERE WE ARE MAKING A RED AND GREEN PLAID PATTERN.
+
+      color.r += sin(20. * vPos.x) > .0 ? 1. : 0.;
+      color.g += sin(20. * vPos.y) > .0 ? 1. : 0.;
+
+      // AN EXAMPLE OF A PATTERN THAT RESPONDS TO THE CURSOR.
+
+      vec3 xy = 4. * (uCursor - vPos) * vec3(1.,1.,.15);
+      color += vec3(max(0., 1. - dot(xy, xy)));
+
+      // THIS IS AN EXAMPLE OF BREAKING OUT OF A LOOP.
+      
+      int n = 4;
+      float x = 0.01;
+      for (int i = 0 ; i < 10 ; i++) {
+         x += x;
+	 if (i >= n)
+	    break;
+      }
+      color *= x;
+
+      // THIS IS AN EXAMPLE OF CALLING YOUR OWN FUNCTION.
+
+      color = makeItBrighter(color);
+
+      // THIS IS AN EXAMPLE OF USING A STEP FUNCTION
+      // INSTEAD OF AN IF STATEMENT.
+
+      color *= .1 + .9 * step(0., xy.x);
+
+      // THIS IS THE ONLY LINE THAT YOU *MUST* KEEP.
+
+      gl_FragColor = vec4(sqrt(color), 1.);
+   }
+`;
+
+// WAIT 100 MSECS BEFORE STARTING UP
+
+setTimeout(() => {
+
+   // INITIALIZE GPU GRAPHICS
+
+   let gl = start_gl(canvas1, meshData, vertexSize, vertexShader, fragmentShader);
+
+   // PASS UNIFORM VARIABLES
+
+   let uTime   = gl.getUniformLocation(gl.program, "uTime"  );
+   let uCursor = gl.getUniformLocation(gl.program, "uCursor");
+   let uMatrix = gl.getUniformLocation(gl.program, "uMatrix");
+
+
+   // WHEN DID WE START ANIMATING?
+
+   let startTime = Date.now() / 1000;
+
+   // START THE ANIMATION LOOP
+
+   setInterval(() => {
+
+      // PASS ELAPSED TIME DOWN TO THE GPU
+
+      let time = Date.now() / 1000 - startTime;
+      gl.uniform1f (uTime, time);
+
+      // PASS THE CURSOR STATE DOWN TO THE GPU
+
+      gl.uniform3fv(uCursor, cursor);
+
+///////////////////////////////////////////////////////////////////////////////
+//// HERE YOU CAN DEFINE YOUR ANIMATION AS A SEQUENCE OF MATRIX OPERATIONS ////
+
+      let c = .5 * Math.cos(time);
+      let s = .5 * Math.sin(time);
+
+      let m = matrixIdentity();
+      m = mTranslate(c,s,0, m);
+      m = mRotateZ(50*time, m);
+      m = mRotateX(50*time, m);
+      m = mRotateY(50*time, m);
+      m = mScale(1,20*c,20*c, m);
+
+      gl.uniformMatrix4fv(uMatrix, false, m);
+
+///////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////
+
+      // LOOP THROUGH ALL OF MY SHAPES
+
+      for (let n = 0 ; n < meshData.length ; n++) {
+
+         // PULL OUT THE ACTUAL MESH DATA
+
+         let mesh = meshData[n].mesh;
+
+	 // LOAD THAT DATA DOWN INTO THE GPU
+
+         gl.bufferData(gl.ARRAY_BUFFER, mesh, gl.STATIC_DRAW);
+
+         // RENDER THAT DATA ACCORDING TO WHAT TYPE IT IS
+
+         gl.drawArrays(meshData[n].type ? gl.TRIANGLE_STRIP : gl.TRIANGLES, 0, mesh.length / vertexSize);
+      }
+   }, 30);
+}, 100);
+</script>
+
+
+
+
+
+
+

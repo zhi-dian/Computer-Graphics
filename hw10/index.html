@@ -1,0 +1,453 @@
+
+<body onload=start()><font face=helvetica>
+<script src=g.js></script>
+<script src=m4.js></script>
+
+<center>
+<b><big>
+<b><big>
+<b><big>
+Topics in computer graphics
+</big></b>
+</big></b>
+<p>
+<i>Ken Perlin</i>
+</big></b>
+</center>
+<center><table width=90%><tr><td><hr color=white size=20>
+
+<hr><big><b>
+Images and colors
+</b></big><p>
+
+<table width=100%><tr><td valign=top>
+
+<b><i>
+How does a computer store an image?
+</i></b><p>
+An image looks like a two dimensional array
+of pixels, nCols wide by nRows high,
+but it is generally stored in the computer
+as a one dimensional array of pixel values.
+The index into this array of a given pixel is:
+<blockquote>
+row * nCols + col   
+</blockquote>
+In the illustration to the right, you can
+move your mouse over the image to select
+a single pixel.
+You can also select a pixel by moving
+your mouse over the linear array below the image.
+Each element of this array corresponds to exactly
+one pixel of the image.
+
+</td><td width=20></td><td valign=top>
+<canvas id=imageScanning width=400 height=200 tabindex="1"></canvas>
+</td></tr></table>
+
+<p>
+<b><i>
+How humans see colors
+</i></b><p>
+<table width=100%><tr><td valign=top>
+The human retina actually contains three different kinds of color receptor cells, each of which has a range of sensitivity to different parts of the visible light spectrum (which ranges from about 400 nanometers to 700 nm in wavelength).
+The illustration on the right shows an approximation to the color sensitivity of each of these types of receptors.
+<p>
+We approximate this in a computer by three numbers at each pixel: one for red, green and blue, respectively.  But this is an imperfect approximation.
+In fact there are many combinations of [r,g,b] that the human eye cannot properly perceive, because our three types of color receptors overlap across the spectrum,
+as you can see by moving your mouse across the illustration to the right.
+<p>
+Complicating things even further, the "red", "green", and "blue" components of your computer screen each actually contain a mix of light frequencies.
+
+</td><td width=20></td><td valign=top>
+<canvas id=humanColors width=400 height=250 tabindex="1"></canvas>
+</td></tr></table>
+
+<hr><big><b>
+Representing shapes with polygons
+</b></big><p>
+
+<p>
+
+<table width=100%><tr><td valign=top>
+
+<b><i>
+Cube
+</i></b><p>
+
+A unit cube is the cube that goes from -1.0 to +1.0
+in all three dimensions.
+Its eight vertices are [-1,-1,-1], [-1,1,+1] ... [+1,+1,+1].
+<p>
+
+It is fairly easy to represent a unit cube with triangles.
+<p>
+Move your mouse over the illustration on the right
+to see one way to make a cube out of twelve triangles.
+
+</td><td width=20></td><td valign=top>
+<canvas id=cube width=400 height=250 tabindex="1"></canvas>
+</td></tr></table>
+<p>
+
+<table width=100%><tr><td valign=top>
+
+<b><i>
+Cylinder
+</i></b><p>
+
+A cylinder can be approximated by triangles by
+constructing an approximation to a round tube and
+two approximately circular end caps.
+<p>
+
+Both the tube and the end caps will not truly
+be round, but rather will be built around an N-sided polygon
+which only approximates a circle.
+As N gets larger, the approximation will become better,
+while the cost of storing and computing the shape will go up.
+<p>
+
+You can see the appearance of different approximations
+by moving your mouse around the illustration to the right.
+
+
+</td><td width=20></td><td valign=top>
+<canvas id=cylinder width=400 height=250 tabindex="1"></canvas>
+</td></tr></table>
+<p>
+
+<table width=100%><tr><td valign=top>
+
+<b><i>
+Sphere
+</i></b><p>
+There are many ways to approximate
+a sphere with triangular meshes.
+One way is by building a longitude/latitude grid.
+
+<p>
+
+Another way to approximate a sphere
+with polygons is to subdivide each
+of the six faces of a unit cube into
+a mesh, and then "inflate" the cube.
+<p>
+This inflation is done by scaling
+the length of each
+vertex [x,y,z] of the cube so
+that
+(x<sup>2</sup> + y<sup>2</sup> + z<sup>2</sup>)
+is equal for all vertices.
+<p>
+After this is done, all vertices
+will be the same distance from the origin,
+and the cube will deform into a sphere.
+<p>
+This method has the advantage that
+it is very simple to implement,
+while producing relatively similar sized
+polygons everywhere on the sphere.
+<p>
+
+Finally, if you want the result to consist only of
+triangles, you can split each of the squares into two
+triangles along one of its long diagonals.
+</td><td width=20></td><td valign=top>
+<canvas id=cubeMeshSphere width=400 height=300 tabindex="1"></canvas>
+
+</td></tr></table>
+
+<script>
+  var m = new M4();
+
+  var cubeVert = [[-1,-1,-1],[ 1,-1,-1],[-1, 1,-1],[ 1, 1,-1],
+                  [-1,-1, 1],[ 1,-1, 1],[-1, 1, 1],[ 1, 1, 1]];
+  var cubeEdge = [[0,1],[2,3],[4,5],[6,7],
+                  [0,2],[1,3],[4,6],[5,7],
+	          [0,4],[1,5],[2,6],[3,7]];
+
+  var eps = 0.5;
+  var inflation = 0.0, rotation = 0.0;
+
+  function inflate(p) {
+     var r = Math.sqrt((p[0]*p[0] + p[1]*p[1] + p[2]*p[2]) / 3);
+     return [lerp(inflation, p[0], p[0] / r),
+             lerp(inflation, p[1], p[1] / r),
+             lerp(inflation, p[2], p[2] / r)];
+  }
+
+  function drawSquareFace(t, isDiag) {
+     var u = isDiag ? t/4 : 0;
+
+     var z = m._m()[10];
+     var c = Math.max(0.2, .5 + .5 * z / (width()/8));
+     lineWidth(c);
+
+     var A  = m.transform([-1-u,-1-u, 1+t]);
+
+     var B0 = m.transform([ 1-u,-1-u, 1+t]);
+     var C0 = m.transform([-1-u, 1-u, 1+t]);
+
+     var B1 = m.transform([ 1+u,-1+u, 1+t]);
+     var C1 = m.transform([-1+u, 1+u, 1+t]);
+
+     var D  = m.transform([ 1+u, 1+u, 1+t]);
+
+     line(A [0], A [1], B0[0], B0[1]);
+     line(A [0], A [1], C0[0], C0[1]);
+
+     line(D [0], D [1], B1[0], B1[1]);
+     line(D [0], D [1], C1[0], C1[1]);
+
+     if (isDiag) {
+        line(B0[0], B0[1], C0[0], C0[1]);
+	if (t > 0)
+           line(B1[0], B1[1], C1[0], C1[1]);
+     }
+  }
+
+  function drawMeshFace(c) {
+     color(c);
+     for (var u = -1 ; u <= 1 ; u += eps)
+     for (var v = -1 ; v <= 1 ; v += eps) {
+        var A = m.transform(inflate([u,v,1]));
+        var B = m.transform(inflate([u+eps,v,1]));
+        var C = m.transform(inflate([u,v+eps,1]));
+	if (u < 1) line(A[0], A[1], B[0], B[1]);
+	if (v < 1) line(A[0], A[1], C[0], C[1]);
+     }
+  }
+
+  imageScanning.setup = function() {
+     textHeight(width()/20);
+     this.row = 0;
+     this.col = 0;
+  }
+
+  imageScanning.animate = function() {
+     var w = width(), h = height();
+     var x = this.mouseX, y = this.mouseY;
+
+     var X = w/4, Y = 1, W = w/2;
+
+     if (x >= X && x < X + W && y >= Y && y < Y + W*4/6) {
+        this.col = Math.floor(6 * (x - X) / W);
+        this.row = Math.floor(6 * (y - Y) / W);
+     }
+
+     else if (y >= h/2) {
+        var n = Math.max(0, Math.min(23, 26 * x / w - 1));
+        this.col = Math.floor(n % 6);
+        this.row = Math.floor(n / 6);
+     }
+
+     var s = W / 6;
+     for (var i = 0 ; i < 6 ; i++)
+     for (var j = 0 ; j < 4 ; j++) {
+        if (i == this.col && j == this.row)
+	   fillRect(X + i * s, 1 + Y + j * s, s, s);
+	drawRect(X + i * s, 1 + Y + j * s, s, s);
+     }
+
+     for (var n = 0 ; n < 24 ; n++) {
+        if (n == this.row * 6 + this.col)
+           fillRect((n + 1) * w / 26, h-w/10, w/26, w/26);
+        drawRect((n + 1) * w / 26, h-w/10, w/26, w/26);
+     }
+
+     text("col:", w/40, w/20);
+     text("row:", w/40, w/20 + w/10);
+     text(this.col, w/40 + w/7, w/20);
+     text(this.row, w/40 + w/7, w/20 + w/10);
+  }
+
+  function drawCurve(pts) {
+     var w = width(), h = height();
+     for (var n = 0 ; n < pts.length - 2 ; n += 2) {
+        var x0 = (pts[n    ] - .04) / .81;
+        var y0 = pts[n + 1] * 4/5;
+        var x1 = (pts[n + 2] - .04) / .81;
+        var y1 = pts[n + 3] * 4/5;
+	line(w * x0, h * (4/5-y0), w * x1, h * (4/5-y1));
+     }
+  }
+
+  function evalCurve(pts, x) {
+     for (var n = 0 ; n < pts.length - 2 ; n += 2) {
+        var x0 = (pts[n    ] - .04) / .81;
+        var y0 = pts[n + 1] * 4/5;
+        var x1 = (pts[n + 2] - .04) / .81;
+        var y1 = pts[n + 3] * 4/5;
+	if (x0 < x && x1 > x)
+	   return y0 + (y1 - y0) * (x - x0) / (x1 - x0);
+     }
+     return 0;
+  }
+
+  var blueCurve = [
+     .05,0, .09,.14, .18,.6, .192,.62, .208,.62, .22,.6,
+     .3,.185, .33,.1, .37,.025, .4,0,
+  ];
+
+  var greenCurve = [
+     .1,0, .2,.05, .25,.1, .3,.2, .4,.8, .43,.9, .45,.92, .47,.9,
+     .54,.67, .62,.3, .67,.17, .70,.1, .77,.01, .82,0,
+  ];
+
+  var redCurve = [
+     .05,0, .09,.08, .11,.08, .14,.05, .17,.04,
+     .2,.045, .25,.08, .3,.12, .32,.15, .34,.2,
+     .40,.54, .42,.62, .45,.70, .5,.8, .52,.82, .55,.8,
+     .57,.75, .70,.23, .74,.12, .78,.05, .81,.02, .85,0,
+  ];
+
+  humanColors.animate = function() {
+     var w = width(), h = height(), x = this.mouseX, y1 = h*4/5;
+     textHeight(w/48);
+     color('black');
+     drawRect(2,2,w-4,y1-3);
+     var ty = y1 + w/32;
+     text("400", 0, ty);
+     text("500", w/3 - w/20/3, ty);
+     text("600", w*2/3 - w/20*2/3, ty);
+     text("700", w - w/20, ty);
+
+
+     textHeight(w/30);
+
+     color('red');
+     drawCurve(redCurve);
+
+     var yr = evalCurve(redCurve, x / w);
+     fillOval(x - 3, h * (4/5 - yr) - 3, 6, 6);
+
+     text("R:", w/60, w/20);
+     fillRect(w/16, w/20*0.3, h * yr / 3, w/30);
+
+
+     color('#00e000');
+     drawCurve(greenCurve);
+
+     var yg = evalCurve(greenCurve, x / w);
+     fillOval(x - 3, h * (4/5 - yg) - 3, 6, 6);
+
+     text("G:", w/60, w/20 * 2);
+     fillRect(w/16, w/20*1.3, h * yg / 3, w/30);
+
+
+     color('blue');
+     drawCurve(blueCurve);
+
+     var yb = evalCurve(blueCurve, x / w);
+     fillOval(x - 3, h * (4/5 - yb) - 3, 6, 6);
+
+     text("B:", w/60, w/20 * 3);
+     fillRect(w/16, w/20*2.3, h * yb / 3, w/30);
+
+
+     color('black');
+     line(x, 0, x, y1);
+  }
+
+  cube.animate = function() {
+     var w = width(), h = height(), x = this.mouseX, y = this.mouseY;
+
+     var dx = x/(w/2) - 1;
+     var dy = y/(w/2) - 1;
+     var rotation = -dx;
+     var t = Math.max(0, Math.min(.5, 4 * (dy + .5)));
+
+     var isDiag = x > w/40 && x < w-w/40;
+     if (! isDiag)
+        t = 0;
+
+     m.push();
+        standardView(0.5, 0.55, rotation, 0.3, 0.5);
+
+	m.push(); m.rotateX( Math.PI  ); drawSquareFace(t, isDiag); m.pop();
+	m.push(); m.rotateX(-Math.PI/2); drawSquareFace(t, isDiag); m.pop();
+	m.push(); m.rotateY( Math.PI/2); drawSquareFace(t, isDiag); m.pop();
+	m.push();                        drawSquareFace(t, isDiag); m.pop();
+	m.push(); m.rotateX( Math.PI/2); drawSquareFace(t, isDiag); m.pop();
+	m.push(); m.rotateY(-Math.PI/2); drawSquareFace(t, isDiag); m.pop();
+     m.pop();
+  }
+
+  cylinder.animate = function() {
+     var w = width(), h = height(), x = this.mouseX, y = this.mouseY;
+     var dx = x/(w/2) - 1;
+     var dy = y/(h/2) - 1;
+     var rotation = -dx;
+     var N = Math.floor(4 + Math.max(0, 23.5 * (1 + dy)));
+
+     textHeight(w/25);
+     text("N = " + N, w/25, h/2);
+
+     m.push();
+        standardView(0.5, 0.55, rotation, 0.3, 0.5);
+
+	var SP = m.transform([0,0,-1]);
+	var NP = m.transform([0,0, 1]);
+
+        for (var n = 0 ; n < N ; n++) {
+	   var c0 = Math.cos(2 * Math.PI * n / N);
+	   var s0 = Math.sin(2 * Math.PI * n / N);
+	   var c1 = Math.cos(2 * Math.PI * (n + 1) / N);
+	   var s1 = Math.sin(2 * Math.PI * (n + 1) / N);
+
+	   var A0 = m.transform([c0,s0,-1]);
+	   var A1 = m.transform([c1,s1,-1]);
+	   var B0 = m.transform([c0,s0, 1]);
+	   var B1 = m.transform([c1,s1, 1]);
+
+           lineWidth(0.3);
+	   line(SP[0], SP[1], A0[0], A0[1]);
+           lineWidth(0.6);
+	   line(A0[0], A0[1], B0[0], B0[1]);
+           lineWidth(1.0);
+	   line(A0[0], A0[1], A1[0], A1[1]);
+	   line(NP[0], NP[1], B0[0], B0[1]);
+	   line(B0[0], B0[1], B1[0], B1[1]);
+	   line(A0[0], A0[1], A1[0], A1[1]);
+	   line(B0[0], B0[1], B1[0], B1[1]);
+	}
+     m.pop();
+  }
+
+  cubeMeshSphere.animate = function() {
+     var dx = this.mouseX/(width()/2) - 1;
+     var dy = this.mouseY/(height()/2) - 1;
+     rotation = -dx;
+     inflation = sCurve(Math.max(0, Math.min(1, 4 * dy)));
+
+     m.push();
+        standardView(0.5, 0.5, rotation, 0.3, 0.7);
+
+        lineWidth(0.5);
+	m.push(); m.rotateX( Math.PI  ); drawMeshFace('#0000ff'); m.pop();
+	m.push(); m.rotateX(-Math.PI/2); drawMeshFace('#00e000'); m.pop();
+	m.push(); m.rotateY( Math.PI/2); drawMeshFace('#ff0000'); m.pop();
+
+        lineWidth(3.0);
+	color('black');
+        var A = m.transform(inflate([-1,0,0]));
+        var B = m.transform(inflate([-1,1,0]));
+	arrow(width()/2, height()/2, A[0], A[1]);
+	arrow(width()/2, height()/2, B[0], B[1]);
+
+        lineWidth(1.0);
+	m.push();                        drawMeshFace('#0000ff'); m.pop();
+	m.push(); m.rotateX( Math.PI/2); drawMeshFace('#00e000'); m.pop();
+	m.push(); m.rotateY(-Math.PI/2); drawMeshFace('#ff0000'); m.pop();
+
+     m.pop();
+  }
+</script>
+
+<hr>
+
+
+</td></tr></table></center>
+
+

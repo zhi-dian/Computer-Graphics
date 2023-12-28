@@ -1,0 +1,179 @@
+<body bgcolor="66ccff">
+    <center>
+    change the X_coordinate of the refractal plane: <input type=range id=slider1 oninput=callback1()><div id = output1></div>
+    change the Y_coordinate of the refractal plane: <input type=range id=slider2 oninput=callback2()><div id = output2></div>
+    change the Z_coordinate of the refractal plane: <input type=range id=slider3 oninput=callback3()><div id = output3></div>
+    <canvas id='canvas2' width=500 height=500></canvas>
+    
+    <script>
+    let m1 = 0.;
+    let callback1 = () => m1 = slider1.value/50;
+    let m2 = 0.;
+    let callback2 = () => m2 = slider2.value/50;
+    let m3 = 0.;
+    let callback3 = () => m3 = slider3.value/50;
+    
+    let mIdentity = () => [ 1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1 ];
+    
+    let mInverse = m => {
+       let dst = [], det = 0, cofactor = (c, r) => {
+          let s = (i, j) => m[c+i & 3 | (r+j & 3) << 2];
+          return (c+r & 1 ? -1 : 1) * ( (s(1,1) * (s(2,2) * s(3,3) - s(3,2) * s(2,3)))
+                                      - (s(2,1) * (s(1,2) * s(3,3) - s(3,2) * s(1,3)))
+                                      + (s(3,1) * (s(1,2) * s(2,3) - s(2,2) * s(1,3))) );
+       }
+       for (let n = 0 ; n < 16 ; n++) dst.push(cofactor(n >> 2, n & 3));
+       for (let n = 0 ; n <  4 ; n++) det += m[n] * dst[n << 2]; 
+       for (let n = 0 ; n < 16 ; n++) dst[n] /= det;
+       return dst;
+    }
+    let matrixMultiply = (a, b) => {
+       let dst = [];
+       for (let n = 0 ; n < 16 ; n++)
+          dst.push(a[n&3]*b[n&12] + a[n&3|4]*b[n&12|1] + a[n&3|8]*b[n&12|2] + a[n&3|12]*b[n&12|3]);
+       return dst;
+    }
+    let mTranslate = (tx,ty,tz, m) => {
+       return matrixMultiply(m, [1,0,0,0, 0,1,0,0, 0,0,1,0, tx,ty,tz,1]);
+    }
+    let mRotateX = (theta, m) => {
+       let c = Math.cos(theta), s = Math.sin(theta);
+       return matrixMultiply(m, [1,0,0,0, 0,c,s,0, 0,-s,c,0, 0,0,0,1]);
+    }
+    let mRotateY = (theta, m) => {
+       let c = Math.cos(theta), s = Math.sin(theta);
+       return matrixMultiply(m, [c,0,-s,0, 0,1,0,0, s,0,c,0, 0,0,0,1]);
+    }
+    let mRotateZ = (theta, m) => {
+       let c = Math.cos(theta), s = Math.sin(theta);
+       return matrixMultiply(m, [c,s,0,0, -s,c,0,0, 0,0,1,0, 0,0,0,1]);
+    }
+    let mScale = (sx,sy,sz, m) => {
+       return matrixMultiply(m, [sx,0,0,0, 0,sy,0,0, 0,0,sz,0, 0,0,0,1]);
+    }
+    let mPerspective = (fl, m) => {
+       return matrixMultiply(m, [1,0,0,0, 0,1,0,0, 0,0,1,-1/fl, 0,0,0,1]);
+    }
+    
+    let start_gl2 = (canvas, meshData, vertexSize, vertexShader, fragmentShader) => {
+       let gl = canvas.getContext("webgl");
+       let program = gl.createProgram();
+       gl.program = program;
+       let addshader = (type, src) => {
+          let shader = gl.createShader(type);
+          gl.shaderSource(shader, src);
+          gl.compileShader(shader);
+          if (! gl.getShaderParameter(shader, gl.COMPILE_STATUS))
+             throw "Cannot compile shader:\n\n" + gl.getShaderInfoLog(shader);
+          gl.attachShader(program, shader);
+       };
+       addshader(gl.VERTEX_SHADER  , vertexShader  );
+       addshader(gl.FRAGMENT_SHADER, fragmentShader);
+       gl.linkProgram(program);
+       if (! gl.getProgramParameter(program, gl.LINK_STATUS))
+          throw "Could not link the shader program!";
+       gl.useProgram(program);
+       gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+       gl.enable(gl.DEPTH_TEST);
+       gl.depthFunc(gl.LEQUAL);
+       let vertexAttribute = (name, size, position) => {
+          let attr = gl.getAttribLocation(program, name);
+          gl.enableVertexAttribArray(attr);
+          gl.vertexAttribPointer(attr, size, gl.FLOAT, false, vertexSize * 4, position * 4);
+       }
+       vertexAttribute('aPos', 3, 0);
+       return gl;
+    }
+    
+    let vertexSize2 = 3;
+    let vertexShader2 = `
+       attribute vec3 aPos;
+       uniform mat4 uMatrix, uInvMatrix;
+       varying vec3 vPos, vNor;
+       void main() {
+          vec4 pos = uMatrix * vec4(aPos, 1.0);
+        //   vec4 nor = vec4(aNor, 0.0) * uInvMatrix;
+          vPos = pos.xyz;
+        //   vNor = nor.xyz;
+          gl_Position = pos * vec4(1.,1.,-.1,1.);
+       }
+    `;
+    
+    let NColor = 40;
+    let fragmentShader2 = `
+       precision mediump float;
+
+       uniform float uX;
+       uniform float uY;
+       uniform float uZ;
+       uniform float uTime;
+       varying vec3 vPos;
+    
+       uniform int tp;
+
+       void main(void) {
+
+        vec3 color = vec3(.7,.7,.5);
+        gl_FragColor = vec4(sqrt(color) + vec3(0.1,0.1,0.2), 1.);
+       }
+    `;
+    let meshData2 = [];
+    setTimeout(() => {
+       let gl2 = start_gl2(canvas2, meshData2, vertexSize2, vertexShader2, fragmentShader2);
+    
+       let uMatrix2    = gl2.getUniformLocation(gl2.program, "uMatrix");
+       let uInvMatrix2 = gl2.getUniformLocation(gl2.program, "uInvMatrix");
+       let uTime2      = gl2.getUniformLocation(gl2.program, "uTime"    );
+       let uX2    = gl2.getUniformLocation(gl2.program, "uX"    );
+       let uY2    = gl2.getUniformLocation(gl2.program, "uY"    );
+       let uZ2    = gl2.getUniformLocation(gl2.program, "uZ"    );
+
+        let startTime = Date.now() / 1000;
+       setInterval(() => {
+          let time = Date.now() / 1000 - startTime;
+          document.getElementById("output1").textContent = m1;
+          document.getElementById("output2").textContent = m2;
+          document.getElementById("output3").textContent = m3;
+          meshData2 = [{ type: 0, trans: [0,0,0  ], rx: 0,         rz: 0,         color: [.1,1.,1.], 
+                                    mesh: new Float32Array([     1.+m1*1.0,    -1.+1.*Math.sin(time),   1.+m3*1.0,
+                                                                1.+m1*1.0,    -1.+m2*1.0,                 -1.+m3*1.0,
+                                                                -1.+m1*1.0,   -1.+m2*1.0,                 1.+m3*1.0])}];
+          for (let n = 0 ; n < meshData2.length ; n++) {
+    
+             let m = mIdentity();
+             m = mPerspective(3, m);
+    
+             //global
+            //  m = mTranslate(0.2,-.5,-1., m);
+             m = mRotateY(.2*Math.sin(time), m);
+             m = mRotateX(.5, m);
+             //private
+             // m = mTranslate(0.,-.5,-.5, m);
+            //  m = mTranslate(meshData[n].trans[0],
+            //                 meshData[n].trans[1],
+            //                 meshData[n].trans[2], m);
+            //  m = mRotateX(meshData[n].rx, m);
+            //  m = mRotateZ(meshData[n].rz, m);
+             m = mScale(.5,.1,.5, m);
+            //  if(meshData[n].tp==1){
+            //     m = mIdentity();
+            //     m = mPerspective(3, m);
+            //     m = mRotateX(.5, m);
+            //  }
+             gl2.uniform1f      (uX2    , m1);
+             gl2.uniform1f      (uY2    , m2);
+             gl2.uniform1f      (uZ2    , m3);
+             gl2.uniform1f(uTime2, Date.now() / 1000 - startTime);
+             gl2.uniformMatrix4fv(uMatrix2   , false, m);
+             gl2.uniformMatrix4fv(uInvMatrix2, false, mInverse(m));
+    
+             let mesh = meshData2[n].mesh;
+             gl2.bufferData(gl2.ARRAY_BUFFER, mesh, gl2.STATIC_DRAW);
+             gl2.drawArrays(meshData2[n].type ? gl2.TRIANGLE_STRIP : gl2.TRIANGLES, 0, mesh.length / vertexSize2);
+          }
+       }, 30);
+    }, 100);
+    </script>
+    
+    
+    

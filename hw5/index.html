@@ -1,0 +1,424 @@
+
+<body bgcolor=black>
+    <center>
+    <canvas id='canvas1' width=800 height=800></canvas>
+    
+    <script>
+    
+    // INITIALIZE GPU PROGRAM
+    
+    let start_gl = (canvas, meshData, vertexSize, vertexShader, fragmentShader) => {
+       let gl = canvas.getContext("webgl");
+       let program = gl.createProgram();
+       gl.program = program;
+       let addshader = (type, src) => {
+          let shader = gl.createShader(type);
+          gl.shaderSource(shader, src);
+          gl.compileShader(shader);
+          if (! gl.getShaderParameter(shader, gl.COMPILE_STATUS))
+             throw "Cannot compile shader:\n\n" + gl.getShaderInfoLog(shader);
+          gl.attachShader(program, shader);
+       };
+       addshader(gl.VERTEX_SHADER  , vertexShader  );
+       addshader(gl.FRAGMENT_SHADER, fragmentShader);
+       gl.linkProgram(program);
+       if (! gl.getProgramParameter(program, gl.LINK_STATUS))
+          throw "Could not link the shader program!";
+       gl.useProgram(program);
+       gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+       gl.enable(gl.DEPTH_TEST);
+       gl.depthFunc(gl.LEQUAL);
+       let vertexAttribute = (name, size, position) => {
+          let attr = gl.getAttribLocation(program, name);
+          gl.enableVertexAttribArray(attr);
+          gl.vertexAttribPointer(attr, size, gl.FLOAT, false, vertexSize * 4, position * 4);
+       }
+       vertexAttribute('aPos', 3, 0);
+       return gl;
+    }
+    
+    // LOGIC TO TRACK THE CURSOR
+    
+    let r = canvas1.getBoundingClientRect(), cursor = [0,0,0];
+    let setCursor = (e, z) => cursor = [ (e.clientX - r.left) / canvas1.width * 2 - 1,
+                                         1 - (e.clientY - r.top) / canvas1.height * 2,
+                                         z !== undefined ? z : cursor[2] ];
+    canvas1.onmousedown = e => setCursor(e, 1);
+    canvas1.onmousemove = e => setCursor(e,  );
+    canvas1.onmouseup   = e => setCursor(e, 0);
+    
+    // TRIANGLE DATA (IN THIS CASE, ONE SQUARE)
+    
+    let meshData = [
+       { type: 1, mesh: new Float32Array([ -1,1,0, 1,1,0, -1,-1,0, 1,-1,0 ]) },
+    ];
+    
+    // SET NUMBER OF LIGHTS AND NUMBER OF SPHERES IN THE SCENE
+    
+    let NLIGHTS  = 2;
+    let NSPHERES = 40;
+    
+    // VERTEX AND FRAGMENT SHADERS
+    
+    let vertexSize = 3;
+    let vertexShader = `
+       attribute vec3 aPos;
+       varying   vec3 vPos;
+       void main() {
+          gl_Position = vec4(aPos, 1.0);
+          vPos = aPos;
+       }
+    `;
+    let fragmentShader = `
+       precision mediump float;
+    
+       uniform float uTime, uFL;
+       uniform vec3  uCursor;
+       uniform vec3  uLC[`+NLIGHTS+`];
+       uniform vec3  uLD[`+NLIGHTS+`];
+       uniform vec4  uSphere[`+NSPHERES+`];
+       
+       uniform vec3  uA[`+NSPHERES+`];
+       uniform vec3  uB[`+NSPHERES+`];
+       uniform vec3  uC[`+NSPHERES+`];
+
+
+       uniform vec3  uAmbient[`+NSPHERES+`];
+       uniform vec3  uDiffuse[`+NSPHERES+`];
+       uniform vec4  uSpecular[`+NSPHERES+`];
+    
+       varying vec3  vPos;
+    
+       float raySphere(vec3 V, vec3 W, vec4 S) {
+        /*
+            V: position of view point
+            W: normalized direction of eyesight
+            S: position and radius of one sphere
+
+            return: distance from the surface of the sphere to the view point
+            -1 if do not hit from this angle
+        */
+          V -= S.xyz;
+          float b = dot(V,W);
+          float c = dot(V,V) - S.w*S.w;
+          float d = b*b - c;
+          return d > 0. ? -b - sqrt(d) : -1.;
+       }
+
+       float rayTriangle(vec3 V, vec3 W, vec3 A, vec3 B, vec3 C) {
+        /*
+            V: position of view point
+            W: normalized direction of eyesight
+            A: position of A
+            B: position of B
+            C: position of C
+
+            return: distance from the triangle to the view point
+            -1 if do not hit from this angle
+        */
+
+        //get the distance from the view point to the plane
+        vec3 N = cross(B-A,C-B);
+        vec4 H = vec4(N.xyz,dot(-N,A));
+
+        float d = dot(-H, vec4(V.xyz,1.)) / dot(H, vec4(W.xyz,0.));
+        
+        vec3 P = V + d * W;
+
+        vec3 PA = cross(N, C-B);
+        vec3 PB = cross(N, A-C);
+        vec3 PC = cross(N, B-A);
+
+        float u = dot(P-B, PA) / dot(A-B,PA);
+        float v = dot(P-C, PB) / dot(B-C,PB);   
+        float w = dot(P-A, PC) / dot(C-A,PC);  
+
+        if(u >= 0. && v >= 0. && w >=0.){
+            return d;
+        }else{
+            return -1.;
+        }
+       }
+    
+    //    float raySphereExit(vec3 V, vec3 W, vec4 S) {
+    //       V -= S.xyz;
+    //       float b = dot(V,W);
+    //       float c = dot(V,V) - S.w*S.w;
+    //       float d = b*b - c;
+    //       return d > 0. ? -b + sqrt(d) : -1.;
+    //    }
+    
+       vec3 shadeSurface(vec3 P, vec3 N, vec3 ambient, vec3 diffuse, vec4 specular, vec3 W) {
+        /*
+        P: the point where eye sight hit
+        N: the normalized direction from hit point to the sphere center
+        ambient specular and diffuse: for color
+        W: normalized direction of eyesight
+        */
+          vec3 color = ambient;
+    
+          for (int l = 0 ; l < `+NLIGHTS+` ; l++) {
+    
+             // SHADOWS
+    
+             float t = -1.;
+             for (int n = 0 ; n < `+NSPHERES+` ; n++)
+                t = max(t, raySphere(P, uLD[l], uSphere[n]));
+             if (t < 0.) {
+    
+                // DIFFUSE AND SPECULAR
+    
+                vec3 R = 2. * dot(uLD[l], N) * N - uLD[l];
+                color += max(0., dot(N, uLD[l])) * uLC[l]*diffuse;
+                color += specular.rgb * pow(max(0.,dot(R,-W)),specular.a) * uLC[l];
+             }
+          }
+    
+          return color;
+       }
+
+       vec3 shadeTriangle(vec3 P, vec3 N, vec3 ambient, vec3 diffuse, vec4 specular, vec3 W) {
+        /*
+        P: the point where eye sight hit
+    ?todo: N: normalized plane normal
+        ambient specular and diffuse: for color
+        W: normalized direction of eyesight
+        */
+          vec3 color = ambient;
+    
+          for (int l = 0 ; l < `+NLIGHTS+` ; l++) {
+    
+             // SHADOWS
+    
+             float t = -1.;
+             for (int n = 0 ; n < `+NSPHERES+` ; n++)
+                t = max(t, rayTriangle(P, uLD[l], uA[n], uB[n], uC[n]));
+
+            //if there is no object between the light source
+             if (t < 0.) {
+    
+                // DIFFUSE AND SPECULAR
+    
+                vec3 R = 2. * dot(uLD[l], N) * N - uLD[l];
+                color += max(0., dot(N, uLD[l])) * uLC[l]*diffuse;
+                color += specular.rgb * pow(max(0.,dot(R,-W)),specular.a) * uLC[l];
+             }
+          }
+    
+          return color;
+       }
+    
+    //    vec3 refractRay(vec3 W, vec3 N, float n) {
+    //       vec3 Wv = N * dot(W, N);
+    //       vec3 Wu = (W - Wv) / n;
+    //       return Wu + normalize(Wv) * sqrt(1. - dot(Wu,Wu));
+    //    }
+    
+       vec3 bgColor = vec3(0.,0.,.05);
+    
+       void main(void) {
+    
+          // SET BACKGROUND COLOR
+    
+          vec3 color = bgColor;
+    
+          // FORM THE RAY FOR THIS PIXEL
+    
+          vec3 V = vec3(0.,0.,uFL);
+          vec3 W = normalize(vec3(vPos.xy,-uFL));
+    
+          // RAY TRACE TO EACH SPHERE, CHOOSING THE NEAREST ONE
+    
+          float tMin = 1000.;
+          float dMin = 1000.;
+          for (int n = 0 ; n < `+NSPHERES+` ; n++) {
+             float t = raySphere(V, W, uSphere[n]);
+             float d = rayTriangle(V, W, uA[n], uB[n], uC[n]);
+             if (d > 0. && d < dMin) {
+                dMin = d;
+                vec3 P = V + d * W;
+                vec3 N = normalize(P - uSphere[n].xyz);
+                color = shadeTriangle(P, N, uAmbient[n],
+                                           uDiffuse[n],
+                                           uSpecular[n], W);
+             }
+
+            //  if (t > 0. && t < tMin) {
+            //     tMin = t;
+            //     vec3 P = V + t * W;
+            //     vec3 N = normalize(P - uSphere[n].xyz);
+            //     color = shadeSurface(P, N, uAmbient[n],
+            //                                uDiffuse[n],
+            //                                uSpecular[n], W);
+    
+            //     // REFRACTION
+    
+            //     // float ior = 1.5;
+            //     // vec3  Win  = refractRay(W, N, ior);
+            //     // float tout = raySphereExit(P, Win, uSphere[n]);
+            //     // vec3  Pout = P + tout * Win;
+            //     // vec3  Nout = normalize(Pout - uSphere[n].xyz);
+            //     // vec3  Wout = refractRay(Win, Nout, 1./ior);
+    
+            //     // vec3 Cg = bgColor; // GLASS COLOR
+            //     // float tgMin = 1000.;
+            //     // for (int j = 0 ; j < `+NSPHERES+` ; j++) {
+            //     //    float t = raySphere(Pout, Wout, uSphere[j]);
+            //     //    if (t > 0. && t < tgMin) {
+            //     //       tgMin = t;
+            //     //       vec3 P = Pout + t * Wout;
+            //     //       vec3 N = normalize(P - uSphere[j].xyz);
+            //     //       Cg = shadeSurface(P, N, uAmbient[j],
+            //     //                               uDiffuse[j],
+            //     //                               uSpecular[j], Wout);
+            //     //    }
+            //     // }
+            //     // color = mix(color, Cg, .8);
+    
+            //     // // REFLECTION
+    
+            //     // vec3 Cm = bgColor; // MIRROR COLOR
+            //     // vec3 Wm = 2. * dot(-W, N) * N + W;
+            //     // float tjMin = 1000.;
+            //     // for (int j = 0 ; j < `+NSPHERES+` ; j++) {
+            //     //    float tj = raySphere(P, Wm, uSphere[j]);
+            //     //    if (tj > 0. && tj < tjMin) {
+            //     //       tjMin = tj;
+            //     //       vec3 Pj = P + tj * Wm;
+            //     //       vec3 Nj = normalize(Pj - uSphere[j].xyz);
+            //     //       Cm = shadeSurface(Pj, Nj, uAmbient[j],
+            //     //                                 uDiffuse[j],
+            //     //                                 uSpecular[j], Wm);
+            //     //    }
+            //     // }
+            //     // color = mix(color, Cm * uSpecular[n].rgb, .2);
+            //  }
+          }  
+          gl_FragColor = vec4(sqrt(color), 1.);
+       }
+    `;
+    
+    // WAIT 100 MSECS BEFORE STARTING UP
+    
+    setTimeout(() => {
+       let gl = start_gl(canvas1, meshData, vertexSize, vertexShader, fragmentShader);
+    
+       // INITIALIZE POSITION, VELOCITY AND PHONG PARAMETERS OF EACH SPHERE
+    
+       let V = [], S = [], ambient = [], diffuse = [], specular = [];
+
+       let A = [], B = [], C = [];
+       let sphereRadius = 0.15;
+       let trilength = 0.1;
+       for (let n = 0 ; n < NSPHERES * 4 ; n++) {
+          if (n % 4 < 3) {
+             S.push(2 * Math.random() - 1);
+             V.push(0);
+             let c = Math.random();
+             ambient.push(.2 * c);
+             diffuse.push(.8 * c);
+             specular.push(1);
+            
+             let init = 1.8 * Math.random() - 0.9;
+             A.push(init);
+             if(n % 4 == 1){
+                C.push(init - 1.6 * trilength);
+                B.push(init - 1.6 * trilength);
+             }else{
+                C.push(init + trilength);
+                B.push(init - trilength);
+             }
+
+            // console.log(A[n - n/4],B[n - n/4],C[n - n/4]);
+          }
+          else {
+             S.push(sphereRadius);
+             specular.push(20);
+          }
+       }
+    
+       // FIND LOCATIONS IN GPU PROGRAM OF UNIFORM VARIABLES
+    
+       let uFL       = gl.getUniformLocation(gl.program, "uFL"      );
+       let uTime     = gl.getUniformLocation(gl.program, "uTime"    );
+       let uCursor   = gl.getUniformLocation(gl.program, "uCursor"  ); 
+       let uLC       = gl.getUniformLocation(gl.program, "uLC"      ); 
+       let uLD       = gl.getUniformLocation(gl.program, "uLD"      ); 
+       let uSphere   = gl.getUniformLocation(gl.program, "uSphere"  );
+       
+       let uA   = gl.getUniformLocation(gl.program, "uA"  ); 
+       let uB   = gl.getUniformLocation(gl.program, "uB"  ); 
+       let uC   = gl.getUniformLocation(gl.program, "uC"  ); 
+
+       let uAmbient  = gl.getUniformLocation(gl.program, "uAmbient" ); 
+       let uDiffuse  = gl.getUniformLocation(gl.program, "uDiffuse" ); 
+       let uSpecular = gl.getUniformLocation(gl.program, "uSpecular"); 
+    
+       // ANIMATE AND RENDER EACH ANIMATION FRAME
+    
+       let startTime = Date.now() / 1000;
+       setInterval(() => {
+          
+          // HANDLE SPHERES BEHAVIOR FOR THIS ANIMATION FRAME
+    
+          for (let n = 0, i = 0 ; n < S.length ; n++)
+             if (n % 4 < 3) {
+               console.log(A[n],B[n],C[n]);
+                V[i] = .99 * V[i] + .02 * (Math.random() - .5);
+                S[n] += .1 * V[i];
+                A[n] += .1 * V[i];
+                B[n] += .1 * V[i];
+                C[n] += .1 * V[i];
+                if (Math.abs(S[n]) > 1)
+                   V[i] = -.2 * Math.sign(S[n]);
+                i++;
+             }
+    
+          // MAKE SPHERES BOUNCE OFF ONE ANOTHER
+    
+        //   for (let i = 0 ; i < S.length-4 ; i += 4)
+        //   for (let j = i+4 ; j < S.length ; j += 4) {
+        //      let A = S.slice(i,i+3), ra = S[i+3];
+        //      let B = S.slice(j,j+3), rb = S[j+3];
+        //      let D = [ B[0]-A[0], B[1]-A[1], B[2]-A[2] ];
+        //      let d = Math.sqrt(D[0]*D[0] + D[1]*D[1] + D[2]*D[2]);
+        //      if (d < ra + rb) {
+        //         let iv = i*3/4;
+        //         let jv = j*3/4;
+        //         for (let k = 0 ; k < 3 ; k++) {
+        //            V[iv+k] -= .1 * D[k];
+        //            V[jv+k] += .1 * D[k];
+        //         }
+        //      }
+        //   }
+    
+          // SET ALL UNIFORM VARIABLES
+    
+          gl.uniform1f(uTime, Date.now() / 1000 - startTime);
+          gl.uniform3fv(uCursor, cursor);
+          gl.uniform1f(uFL, 3);
+          let r3 = Math.sqrt(1/3);
+          gl.uniform3fv(uLC, [1,1,1,      .3,.2,.1]);
+          gl.uniform3fv(uLD, [r3,r3,r3, -r3,-r3,-r3]);
+          gl.uniform4fv(uSphere, S);
+
+          
+          gl.uniform3fv(uA, A);
+          gl.uniform3fv(uB, B);
+          gl.uniform3fv(uC, C);
+          gl.uniform3fv(uAmbient, ambient);
+          gl.uniform3fv(uDiffuse, diffuse);
+          gl.uniform4fv(uSpecular, specular);
+    
+          // RENDER THE FRAME
+    
+          for (let n = 0 ; n < meshData.length ; n++) {
+             let mesh = meshData[n].mesh;
+             gl.bufferData(gl.ARRAY_BUFFER, mesh, gl.STATIC_DRAW);
+             gl.drawArrays(meshData[n].type ? gl.TRIANGLE_STRIP : gl.TRIANGLES, 0, mesh.length / vertexSize);
+          }
+       }, 30);
+    }, 100);
+    </script>
+    
+    

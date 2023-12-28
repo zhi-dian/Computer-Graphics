@@ -1,0 +1,27 @@
+<body bgcolor=blue>
+<center>
+<canvas id=canvas1 width=500 height=500></canvas>
+<script>
+let w = canvas1.width;
+let h = canvas1.height;
+let ctx = canvas1.getContext('2d');
+
+let startTime = Date.now() / 1000;
+
+setInterval(() => {
+
+   let time = Date.now() / 1000 - startTime;
+
+   let c = 50 * Math.cos(4 * time);
+   let s = 50 * Math.sin(4 * time);
+
+   ctx.fillStyle = 'white';
+   ctx.fillRect(0,0,500,500);
+
+   ctx.fillStyle = 'black';
+   let radius = 20;
+   ctx.fillRect(w/2+c - radius, h/2+s - radius, 2*radius, 2*radius);
+
+}, 30);
+
+</script>

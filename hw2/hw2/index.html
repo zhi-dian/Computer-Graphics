@@ -1,0 +1,366 @@
+<body bgcolor="66ccff">
+<center>
+
+<!! HERE IS A LINK TO THE "CHEAT CARD" THAT SHOWS ALL THE FUNCTIONS YOU CAN CALL IN GLSL.>
+<!! THE LAST PAGE IS ESPECIALLY USEFUL, BECAUSE THAT DESCRIBES ALL THE BUILT-IN FUNCTIONS.>
+
+Code for Rotating Animation Randering: <br> color += (1.-10.*max(length(uVelocity1)/10. ,sin(50. * (+uVelocity1.y * (vPos.y - 2. * uBall1.y) / length(uVelocity1) + uVelocity1.x * (vPos.x - 2. * uBall1.x) / length(uVelocity1)))))*vec3(max(0., 1. - dot(xy, xy)));<br>
+Fomular of Collision: <br> uptv1 = scale(1./(m1+m2),add(scale((m1-m2),v1), scale(2*m2,v2)));<p>
+<canvas id='canvas1' width=500 height=500></canvas>
+<br>
+<button id = button1 onclick = reset1() >
+      <p style="font-size: 40ptx;">
+         Reset
+      </p>
+</button>
+<br>
+change the mass of the first ball: <input type=range id=slider1 oninput=callback1()><div id = output1></div>
+<br>
+change the mass of the second ball: <input type=range id=slider2 oninput=callback2()><div id = output2></div>
+<br>
+change the control of mouse: <input type=range id=slider3 oninput=callback3()><div id = output3></div>
+<br>
+<script>
+
+
+// THIS FUNCTION DOES ALL OF THE INITIALIZING FOR THE GPU PROGRAM.
+
+let start_gl = (canvas, meshData, vertexSize, vertexShader, fragmentShader) => {
+
+   // GET THE 3D CONTEXT OF THE CANVAS
+
+   let gl = canvas.getContext("webgl");
+
+   // CREATE A PROGRAM THAT WILL RUN ON THE GPU
+
+   let program = gl.createProgram();
+   gl.program = program;
+
+   // THIS IS HOW WE COMPILE AND ATTACH A SHADER TO THE GPU PROGRAM
+
+   let addshader = (type, src) => {
+      let shader = gl.createShader(type);
+      gl.shaderSource(shader, src);
+      gl.compileShader(shader);
+      if (! gl.getShaderParameter(shader, gl.COMPILE_STATUS))
+         throw "Cannot compile shader:\n\n" + gl.getShaderInfoLog(shader);
+      gl.attachShader(program, shader);
+   };
+
+   // ADD THE VERTEX AND FRAGMENT SHADERS
+
+   addshader(gl.VERTEX_SHADER  , vertexShader  );
+   addshader(gl.FRAGMENT_SHADER, fragmentShader);
+
+   // LINK THE PROGRAM AND REPORT ANY ERRORS
+
+   gl.linkProgram(program);
+   if (! gl.getProgramParameter(program, gl.LINK_STATUS))
+      throw "Could not link the shader program!";
+   gl.useProgram(program);
+
+   // DECLARE A PLACE FOR MY VERTICES TO GO DOWN ON THE GPU
+
+   gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+
+   // PERMIT THE GPU TO RENDER NEARER THINGS IN FRONT OF FARTHER AWAY THINGS
+
+   gl.enable(gl.DEPTH_TEST);
+   gl.depthFunc(gl.LEQUAL);
+
+   // SET ANY ONE ATTRIBUTE OF A VERTEX
+
+   let vertexAttribute = (name, size, position) => {
+      let attr = gl.getAttribLocation(program, name);
+      gl.enableVertexAttribArray(attr);
+      gl.vertexAttribPointer(attr, size, gl.FLOAT, false, vertexSize * 4, position * 4);
+   }
+
+   // SET THE POSITION ATTRIBUTE
+
+   vertexAttribute('aPos', 3, 0);
+
+   return gl;
+}
+
+// HERE WE ARE SETTING UP HOW THE CANVAS RESPONDS TO MOUSE EVENTS.
+
+let r = canvas1.getBoundingClientRect(), cursor = [0,0,0];
+let setCursor = (e, z) => cursor = [ (e.clientX - r.left) / canvas1.width * 2 - 1,
+                                     1 - (e.clientY - r.top) / canvas1.height * 2,
+                                     z !== undefined ? z : cursor[2] ];
+canvas1.onmousedown = e => setCursor(e, 1);
+canvas1.onmousemove = e => setCursor(e,  );
+canvas1.onmouseup   = e => setCursor(e, 0);
+
+// ALL OF THE 3D MESH SHAPES THAT WE ARE RENDERING (FOR NOW IT'S JUST ONE SHAPE)
+
+let meshData = [
+   { type: 1, mesh: new Float32Array([ -1,1,0, 1,1,0, -1,-1,0, 1,-1,0 ]) },
+];
+
+// THE VERTEX SHADER, FOLLOWED BY THE FRAGMENT SHADER
+
+let vertexSize = 3;
+let vertexShader = `
+   attribute vec3 aPos;
+   varying   vec3 vPos;
+   void main() {
+      gl_Position = vec4(aPos, 1.0);
+      vPos = aPos;
+   }
+`;
+let fragmentShader = `
+   precision mediump float;
+   uniform float uTime;
+   uniform vec3 uVelocity1;
+   uniform vec3  uBall1;
+
+   uniform vec3 uVelocity2;
+   uniform vec3  uBall2;
+
+   varying vec3  vPos;
+
+   // THIS IS A SIMPLE EXAMPLE OF IMPLEMENTING YOUR OWN FUNCTION.
+
+   vec3 makeItBrighter(vec3 color) {
+      return 2. * color;
+   }
+
+
+
+   void main() {
+
+// ALL OF THE WORK YOU WILL DO FOR THIS ASSIGNMENT WILL
+// BE MODIFICATIONS TO THE FRAGMENT SHADER. IF YOU ARE
+// AMBITIOUS, YOU CAN TRY TO DEFINE YOUR OWN FUNCTIONS.
+// YOU CAN USE THE EXAMPLE FUNCTION ABOVE.
+
+// FEEL FREE TO GET RID OF ALL OF THE CODE BELOW, AND
+// REPLACE IT WITH YOUR OWN ORIGINAL CODE FOR HW2.
+
+      // HERE WE ARE JUST SETTING A DARK BLUE BACKGROUND.
+
+      vec3 color = vec3(0.,0.,.1);
+
+      // HERE WE ARE MAKING A RED AND GREEN PLAID PATTERN.
+
+      color.g += (sin(20. * vPos.x ));
+      color.r += (cos(20. * vPos.y)>0.1?1.:0.);
+
+      // AN EXAMPLE OF A PATTERN THAT RESPONDS TO THE CURSOR.
+
+      //radius = 0.2
+      vec3 xy1 = 5. * (uBall1 - vPos) * vec3(1.,1.,.15);
+      vec3 xy2 = 5. * (uBall2 - vPos) * vec3(1.,1.,.15);
+      // color += (1.+10.*sin(-50. * uVelocity1.x + 40. * vPos.x - 50. * uVelocity1.y + 40. * vPos.y))*vec3(max(0., 1. - dot(xy, xy)));
+      // color += (1.-10.*max(length(uVelocity1)/10. ,sin(50. * (+uVelocity1.y * (1. - vPos.y) / length(uVelocity1) + uVelocity1.x * (1. - vPos.x) / length(uVelocity1)))))*vec3(max(0., 1. - dot(xy, xy)));
+      color += (1.-10.*max(length(uVelocity1)/10. ,sin(50. * (+uVelocity1.y * (vPos.y - 2. * uBall1.y) / length(uVelocity1) + uVelocity1.x * (vPos.x - 2. * uBall1.x) / length(uVelocity1)))))*vec3(max(0., 1. - dot(xy1, xy1)));
+      color += (1.-10.*max(length(uVelocity2)/10. ,sin(50. * (+uVelocity2.y * (vPos.y - 2. * uBall2.y) / length(uVelocity2) + uVelocity2.x * (vPos.x - 2. * uBall2.x) / length(uVelocity2)))))*vec3(max(0., 1. - dot(xy2, xy2)));
+      // color += (1.+10.*sin(-50. * ()))*vec3(max(0., 1. - dot(xy, xy)));
+      // color += 1.*(vec3(max(0., 1. - dot(xy, xy)))-vec3(max(0.,1. - dot(xy, xy))));
+
+
+      // THIS IS AN EXAMPLE OF CALLING YOUR OWN FUNCTION.
+
+      color = makeItBrighter(color);
+
+      // THIS IS AN EXAMPLE OF USING A STEP FUNCTION
+      // INSTEAD OF AN IF STATEMENT.
+
+      // color *= .1 + .9 * step(0., xy.x);
+
+      // THIS IS THE ONLY LINE THAT YOU *MUST* KEEP.
+
+      gl_FragColor = vec4(sqrt(color), 1.);
+   }
+`;
+
+//generate from ChatGPT
+function length(vector) {
+   // console.log(vector);
+   return Math.sqrt(vector.reduce((sum, val) => sum + val * val, 0));
+}
+
+function add(vect1, vect2){
+  let result = [];
+  for (let i = 0; i < vect1.length; i++) {
+    result.push(vect1[i] + vect2[i]);
+  }
+  return result;
+}
+
+function sub(vect1, vect2){
+  let result = [];
+  for (let i = 0; i < vect1.length; i++) {
+    result.push(vect1[i] - vect2[i]);
+  }
+  return result;
+}
+
+function dott(vect1, vect2){
+  let result = 0;
+  for (let i = 0; i < vect1.length; i++) {
+    result = result + (vect1[i] * vect2[i]);
+  }
+  return result;
+}
+
+function scale(num1, vect1){
+  let result = [];
+  for (let i = 0; i < vect1.length; i++) {
+    result.push(num1 * vect1[i]);
+  }
+  return result;
+}
+
+function reset1(){
+      // console.log("clicked!");
+      pos1 = cursor;
+      velocity1 = [0.,0.,0.];
+      m1 = 1;
+
+      pos2 = [0.5,0.5,0];
+      velocity2 = [0,0,0];
+      m2 = 1;
+}
+// WAIT 100 MSECS BEFORE STARTING UP
+
+let pos1 = cursor;
+let velocity1 = [0.,0.,0.];
+let m1 = 1;
+
+let pos2 = [0.5,0.5,0];
+let velocity2 = [0,0,0];
+let m2 = 1;
+
+let ctrl = .1;
+
+let callback1 = () => m1 = 1 + slider1.value*1;
+let callback2 = () => m2 = 1 + slider2.value*1;
+let callback3 = () => ctrl = 0. + slider3.value/100;
+
+setTimeout(() => {
+
+   // INITIALIZE GPU GRAPHICS
+
+   let gl = start_gl(canvas1, meshData, vertexSize, vertexShader, fragmentShader);
+
+// ball1: controlable
+
+
+// variable for collide
+   let v1 = [0,0], res1 = [0,0];
+   let v2 = [0,0], res2 = [0,0];
+
+   // PASS UNIFORM VARIABLES
+
+   let uTime   = gl.getUniformLocation(gl.program, "uTime"  );
+
+   let uBall1 = gl.getUniformLocation(gl.program, "uBall1");
+   let uVelocity1 = gl.getUniformLocation(gl.program, "uVelocity1");
+
+   let uBall2 = gl.getUniformLocation(gl.program, "uBall2");
+   let uVelocity2 = gl.getUniformLocation(gl.program, "uVelocity2");
+
+   // WHEN DID WE START ANIMATING?
+
+   let startTime = Date.now() / 1000;
+
+   // START THE ANIMATION LOOP
+
+   setInterval(() => {
+      document.getElementById("output1").textContent = m1;
+      document.getElementById("output2").textContent = m2;
+      document.getElementById("output3").textContent = ctrl;
+
+      // PASS ELAPSED TIME DOWN TO THE GPU
+      // console.log("pos1: " + m1);
+      // console.log("pos2: " + m2);
+      // console.log(prevcursor-cursor);
+
+      //update position using velocity
+      let prepos2 = pos2.slice();
+      let prepos1 = pos1.slice();
+      for(let i=0;i<3;i++){
+         velocity1[i] = ctrl * (cursor[i] - pos1[i]);
+         pos1[i] = pos1[i] + velocity1[i];
+
+         // velocity2[i] = 0.1 * (cursor[i] - pos2[i]);
+         pos2[i] = pos2[i] + velocity2[i];
+      }
+
+      //bouncing detect
+      if(-1<=prepos2[0]&&pos2[0]<-1 || 1<pos2[0]&&prepos2[0]<=1){
+         velocity2 = [-1 * velocity2[0],velocity2[1],velocity2[2]];
+         // console.log(velocity2);
+      }
+      if(-1<=prepos2[1]&&pos2[1]<-1 || 1<pos2[1]&&prepos2[1]<=1){
+         velocity2 = [velocity2[0],-1 * velocity2[1],velocity2[2]];
+         // console.log(velocity2);
+      }
+
+      //collide detect
+      if(length(sub(pos1.slice(0,2), pos2.slice(0,2)))<0.4 && length(sub(prepos1.slice(0,2), prepos2.slice(0,2)))){
+         let tempos1 = pos1.slice(0,2), tempos2 = pos2.slice(0,2);
+         let direct = sub(tempos1,tempos2);
+         // console.log(velocity2);
+         //update velocity
+         direct = scale(1./length(direct), direct);
+         // console.log(direct);
+         v1 = scale(dott(velocity1.slice(0,2),direct), direct);
+         v2 = scale(dott(velocity2.slice(0,2),direct), direct);
+         // console.log(v1);
+
+         res1 = sub(velocity1.slice(0,2), v1);
+         res2 = sub(velocity2.slice(0,2), v2);
+         // console.log(res1);
+
+         let uptv1 = scale(1./(m1+m2),add(scale((m1-m2),v1), scale(2*m2,v2)));
+         let uptv2 = scale(1./(m1+m2),add(scale((m2-m1),v2), scale(2*m1,v1)));
+         // console.log(v2);
+
+         v1 = add(res1, uptv1);
+         v2 = add(res2, uptv2);
+         velocity1[0] = v1[0], velocity1[1] = v1[1];
+         velocity2[0] = v2[0], velocity2[1] = v2[1];
+      }
+
+
+      gl.uniform1f (uTime, Date.now() / 1000 - startTime);
+
+      // PASS THE CURSOR STATE DOWN TO THE GPU
+
+      gl.uniform3fv(uBall1, pos1);
+      gl.uniform3fv(uVelocity1, velocity1);
+
+      gl.uniform3fv(uBall2, pos2);
+      gl.uniform3fv(uVelocity2, velocity2);
+      // gl.uniform3fv(uCursor, prevcursor);
+
+      // LOOP THROUGH ALL OF MY SHAPES
+
+      for (let n = 0 ; n < meshData.length ; n++) {
+
+         // PULL OUT THE ACTUAL MESH DATA
+
+         let mesh = meshData[n].mesh;
+
+         // LOAD THAT DATA DOWN INTO THE GPU
+
+         gl.bufferData(gl.ARRAY_BUFFER, mesh, gl.STATIC_DRAW);
+
+         // RENDER THAT DATA ACCORDING TO WHAT TYPE IT IS
+
+         gl.drawArrays((meshData[n].type ? gl.TRIANGLE_STRIP : gl.TRIANGLES), 0, mesh.length / vertexSize);
+      }
+   }, 30);
+}, 100);
+</script>
+
+
+
+
+
+
+

@@ -1,0 +1,185 @@
+
+<!DOCTYPE html>
+<head>
+    <meta charset="UTF-8">
+</head>
+<body bgcolor = #66ccff>
+    <center>
+        <div style = 'color: white'>
+            <p style = 'color: white'>
+                A test of arcTo()method function's parameters(doesn't work on Chrome and Safari<br>
+                Works on SeaMonky<br>
+                arcTo(x1,y1,x2,y2,radius)
+            </p>
+            x1: <input type=range id=slider1 oninput=callback1()><div id = output1></div>
+            <br>
+            y1: <input type=range id=slider2 oninput=callback2()><div id = output2></div>
+            <br>
+            x2: <input type=range id=slider3 oninput=callback3()><div id = output3></div>
+            <br>
+            y2: <input type=range id=slider4 oninput=callback4()><div id = output4></div>
+            <br>
+            radius: <input type=range id=slider5 oninput=callback5()><div id = output5></div>
+            <br>
+            <canvas id=canvas1 width=500 height=500></canvas>
+            <br><br><br>
+            <button id = button1 onclick = reset1() >
+                <p style="font-size: 40ptx;">
+                    Reset
+                </p>
+            </button>
+            <button id = button2 onclick = stop() >
+                <p style="font-size: 40ptx;">
+                    Pause
+                </p>
+            </button>
+            <br><br><br>
+            <canvas id = canvas2 width=500 height=500></canvas>
+            <br><br><br>
+            <canvas id = canvas3 width=500 height=500></canvas>
+
+        </div>
+        <script>
+            let ctx = canvas1.getContext('2d');
+
+            let time = Date.now()/1000;
+            let w = canvas1.width;
+            let h = canvas1.height;
+
+            let x1 = 100
+            let y1 = 100
+            let x2 = 100
+            let y2 = 100
+            let r = 100
+            let callback1 = () => x1 = 0 + slider1.value*1;
+            let callback2 = () => y1 = 0 + slider2.value*1;
+            let callback3 = () => x2 = 0 + slider3.value*1;
+            let callback4 = () => y2 = 0 + slider4.value*1;
+            let callback5 = () => r = 100 + slider5.value*1;
+            
+            let deltime = time;
+
+            let moving = 1
+            function stop(){
+                moving = !moving;
+            }
+
+            let angle=function(x1,x2){
+                // console.log("draw arc");
+                ctx.fillStyle = 'black';
+                ctx.beginPath();
+                // ctx.moveTo(w/2,h/2);
+                ctx.arcTo(x1,y1,x2,y2,r);
+                ctx.stroke();
+
+                ctx.beginPath();
+                // ctx.arcTo(x1,x2,x1,x2+60,60);
+                // ctx.stroke();
+                // ctx.fill();
+                ctx.arcTo(x1+100,y1+100,x2+100,y2+100,r);
+                ctx.stroke();
+                document.getElementById("output1").textContent = x1;
+                document.getElementById("output2").textContent = y1;
+                document.getElementById("output3").textContent = x2;
+                document.getElementById("output4").textContent = y2;
+                document.getElementById("output5").textContent = r;
+            }
+
+            //implement pausing
+            if(moving){
+// canvas1 drawing===================================
+            function reset1(){
+                console.log("clicked!");
+                ctx3.fillStyle = 'white';
+                ctx3.fillRect(0,0,w,h);
+                deltime = 0;
+            }
+
+            setInterval(() =>{
+                ctx.fillStyle = "white";
+                ctx.fillRect(0,0,w,h);
+                angle(x1,x2);
+
+            },30)
+
+            ctx3 = canvas2.getContext('2d');
+            ctx3.fillStyle = "white";
+            ctx3.fillRect(0,0,w,h);
+
+
+            setInterval(() =>{
+                ctx3.fillStyle = "white";
+                // ctx3.fillRect(0,0,w,h);
+                ctx3.save();
+                    // console.log(deltime)
+                    // if(moving){
+                    //     deltime = (Date.now()/1000);
+                    // }
+                    c =  (2*deltime%Math.PI+0.5)*Math.cos(deltime*2);
+                    s =  (2*deltime%Math.PI+0.5)*Math.sin(deltime*2);
+
+                    ctx3.setTransform(c,-s,s,c,w/2,h/2);
+                    let xcolor = `rgb(${100*(deltime+0)%125+50}, ${0}, ${100*(deltime+100)%125+50})`;
+                    // console.log(xcolor);
+                    ctx3.strokeStyle = xcolor;
+                    // ctx3.strokeStyle = "blue";
+                    ctx3.strokeRect(-100,-100,200,200);
+                ctx3.restore();
+            },30)
+
+
+// canvas2 drawing===================================
+            function reset2(){
+                console.log("clicked!");
+                ctx4.fillStyle = 'white';
+                ctx4.fillRect(0,0,w,h);
+                deltime = 0;
+            }
+
+            setInterval(() =>{
+                ctx.fillStyle = "white";
+                ctx.fillRect(0,0,w,h);
+                angle(x1,x2);
+
+            },30)
+
+            ctx4 = canvas3.getContext('2d');
+            ctx4.fillStyle = "white";
+            ctx4.fillRect(0,0,w,h);
+            ctx4.strokeRect(200,200,100,100);
+
+            setInterval(() =>{
+                ctx4.fillStyle = "white";
+                // ctx4.fillRect(-w/2,-h/2,w,h);
+                ctx4.fillRect(0,0,w,h);
+                // ctx4.save();
+                    // console.log(deltime)
+                    if(moving){
+                        deltime = (Date.now()/1000);
+                    }
+                    ctx4.save();
+                    let tempdel = deltime;
+                    for(let i = 0;i<5;i++){
+                        tempdel+=0.5;                   
+                        c =  (1.2*tempdel%Math.PI+0.5)*Math.cos(tempdel*1);
+                        s =  (1.2*tempdel%Math.PI+0.5)*Math.sin(tempdel*1);
+
+                        ctx4.setTransform(c,-s,s,c,w/2,h/2);
+                        // ctx4.restore();
+                        let xcolor = `rgb(${100*(tempdel+0)%125+50}, ${0}, ${100*(tempdel+100)%125+50})`;
+                        // console.log(xcolor);
+                        ctx4.strokeStyle = xcolor;
+                        // ctx4.strokeStyle = "blue";
+                        ctx4.strokeRect(-100,-100,200,200);
+                    }
+                        
+                    ctx4.restore();
+            },30)
+
+
+            }
+
+        </script>
+    </center>
+
+</body>

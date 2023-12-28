@@ -1,0 +1,285 @@
+
+<body onload=start()><font face=helvetica>
+<script src=g.js></script>
+<script src=m4.js></script>
+
+<center>
+<b><big>
+<b><big>
+<b><big>
+Homework10
+</big></b>
+</big></b>
+<p>
+<i>Jinhong Xia</i>
+</big></b>
+</center>
+<center><table width=90%><tr><td><hr color=white size=20>
+
+<table><tr>
+   <td width=80% valign=top>
+   <font face=helvetica>
+   <p><b>Hermite splines, part 1</b><p>
+   <blockquote>
+   We can choose four basis functions
+   that give us independent control over the position
+   at t = 0 and t = 1,
+   as well as the rate of change
+   at t = 0 and t = 1.
+   This is called the <i>Hermite</i> basis,
+   after the french mathematician who devised it.
+   <p>
+   If we want a curve with position A at t = 0,
+   position B at t = 1,
+   rate C at t = 0,
+   and rate D at t = 1,
+   we can use the four functions to the right
+   to compute the cubic polynomial we are looking for.
+   <p>
+   </blockquote>
+   <font face=helvetica>
+      <p><b>Hermite splines, part 2</b><p>
+      <blockquote>
+      Because these four hermite basis polynomials never change,
+      and the cubic polynomial we want is just a weighted sum of those four polynomials,
+      we can express this weighted sum as a multiplication of the weights
+      by a matrix, which we call the <i>Hermite matrix</i>.
+      <p>
+      In other words, the expression:
+      <blockquote>
+      A (2t<sup>3</sup> - 3t<sup>2</sup> + 1) +
+      B (-2t<sup>3</sup> + 3t<sup>2</sup>) +
+      C (t<sup>3</sup> - 3t<sup>2</sup> + t) +
+      D (t<sup>3</sup> - t<sup>2</sup>)
+      </blockquote>
+      can be expressed as a matrix vector product:
+      <blockquote>
+
+
+      <table><tr>
+      <td>
+         <div id = 'output'></div>
+      </td>
+      <td width=20></td>
+      <td>
+      =
+      </td>
+      <td width=20></td>
+      <th><img src=Hermite.png width=130></th>
+      <td width=10></td>
+      <td>
+      <font size=1><br></font>
+         <div id = 'input'></div>
+      </td>
+      </tr></table>
+
+
+
+      </blockquote>
+      to convert positions and rates at the two ends into the desired cubic polynomial:
+      <blockquote>
+      at<sup>3</sup> + bt<sup>2</sup> + ct + d.
+      </blockquote>
+      </blockquote>
+   </td><td width=20></td><td valign=top>
+      2t<sup>3</sup> - 3t<sup>2</sup> + 1 &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &emsp;t<sup>3</sup> - 2t<sup>2</sup> + t  
+   <canvas id=hermite width=500 height=300 tabindex="1"></canvas>
+      -2t<sup>3</sup> + 3t<sup>2</sup>&emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; &emsp;&emsp;t<sup>3</sup> - t<sup>2</sup>
+      <br><br><br><canvas id=hermitecurve width=500 height=300 tabindex="1"></canvas>
+   </td>
+
+</tr></table>
+
+
+
+<script>
+  var m = new M4();
+
+  var cubeVert = [[-1,-1,-1],[ 1,-1,-1],[-1, 1,-1],[ 1, 1,-1],
+                  [-1,-1, 1],[ 1,-1, 1],[-1, 1, 1],[ 1, 1, 1]];
+  var cubeEdge = [[0,1],[2,3],[4,5],[6,7],
+                  [0,2],[1,3],[4,6],[5,7],
+	          [0,4],[1,5],[2,6],[3,7]];
+
+  var eps = 0.5;
+  var inflation = 0.0, rotation = 0.0;
+
+  function inflate(p) {
+     var r = Math.sqrt((p[0]*p[0] + p[1]*p[1] + p[2]*p[2]) / 3);
+     return [lerp(inflation, p[0], p[0] / r),
+             lerp(inflation, p[1], p[1] / r),
+             lerp(inflation, p[2], p[2] / r)];
+  }
+
+  function drawSquareFace(t, isDiag) {
+     var u = isDiag ? t/4 : 0;
+
+     var z = m._m()[10];
+     var c = Math.max(0.2, .5 + .5 * z / (width()/8));
+     lineWidth(c);
+
+     var A  = m.transform([-1-u,-1-u, 1+t]);
+
+     var B0 = m.transform([ 1-u,-1-u, 1+t]);
+     var C0 = m.transform([-1-u, 1-u, 1+t]);
+
+     var B1 = m.transform([ 1+u,-1+u, 1+t]);
+     var C1 = m.transform([-1+u, 1+u, 1+t]);
+
+     var D  = m.transform([ 1+u, 1+u, 1+t]);
+
+     line(A [0], A [1], B0[0], B0[1]);
+     line(A [0], A [1], C0[0], C0[1]);
+
+     line(D [0], D [1], B1[0], B1[1]);
+     line(D [0], D [1], C1[0], C1[1]);
+
+     if (isDiag) {
+        line(B0[0], B0[1], C0[0], C0[1]);
+	if (t > 0)
+           line(B1[0], B1[1], C1[0], C1[1]);
+     }
+  }
+
+  function drawMeshFace(c) {
+     color(c);
+     for (var u = -1 ; u <= 1 ; u += eps)
+     for (var v = -1 ; v <= 1 ; v += eps) {
+        var A = m.transform(inflate([u,v,1]));
+        var B = m.transform(inflate([u+eps,v,1]));
+        var C = m.transform(inflate([u,v+eps,1]));
+	if (u < 1) line(A[0], A[1], B[0], B[1]);
+	if (v < 1) line(A[0], A[1], C[0], C[1]);
+     }
+  }
+
+  hermite.setup = function() {
+     textHeight(width()/50);
+     this.row = 0;
+     this.col = 0;
+  }
+
+
+
+     var x = 0,y = 0;
+     var HX = [0,0,0,0];
+
+     var HY = [1,0,0,0];
+
+     var D3 = [ 2, 1,-2,  1];
+     var D2 = [-3,-2, 3, -1];
+     var D1 = [ 0, 1, 0,  0];
+     var D0 = [ 1, 0, 0,  0];
+  hermite.animate = function() {
+     var w = width(), h = height();
+     var X = w/2, Y = h/2, W = w/2;
+     var s = w / 2.1, t = h / 2.1;
+
+     var _BX = [0,X,0,X];
+     var BX_ = [X,w,X,w];
+     var _BY = [0,0,Y,Y];
+     var BY_ = [Y,Y,h,h];
+
+     if(this.mousePressed){
+      x = this.mouseX, y = this.mouseY;
+
+      for(var i = 0;i<4;i++){
+         if(_BX[i]<x&&x<BX_[i]&&_BY[i]<y&&y<BY_[i]){
+            HX[i] = (x-_BX[i])/(BX_[i]-_BX[i]);
+         }
+      }
+     }
+
+     drawRect(1,  1,   s, t);drawRect(X+1,1,   s, t);drawRect(1,  Y+1, s, t);drawRect(X+1,Y+1, s, t);
+     for(var i = 0;i<4;i++){
+         // if(_BX[i]<x&&x<BX_[i]&&_BY[i]<y&&y<BY_[i]){
+         //    HX[i] = (x-_BX[i])/(BX_[i]-_BX[i]);
+         // }
+         HY[i] = D3[i]*HX[i]**3 + D2[i]*HX[i]**2 + D1[i]*HX[i] +D0[i];
+         if(i%2==0)
+         fillOval(_BX[i]+HX[i]*s,BY_[i]-HY[i]*t - .05 * t, 6, 6);
+         else
+         fillOval(_BX[i]+HX[i]*s,BY_[i]-HY[i]*t - .05 * t - t/2, 6, 6);
+         
+         for(var xi = 0;xi<.95;xi+=.1){
+            yi   = D3[i]*xi**3 + D2[i]*xi**2 + D1[i]*xi +D0[i];
+            xi_1 = xi+.1;
+            yi_1 = D3[i]*xi_1**3 + D2[i]*xi_1**2 + D1[i]*xi_1 +D0[i];
+            if(i%2==0)
+            line(_BX[i]+xi*s,BY_[i]-yi*t - .05 * t, _BX[i]+xi_1*s, BY_[i]-yi_1*t - .05 * t);
+            else
+            line(_BX[i]+xi*s,BY_[i]-yi*t - .05 * t-t/2, _BX[i]+xi_1*s, BY_[i]-yi_1*t - .05 * t-t/2);
+         
+         }
+      }
+
+     text("X1:", _BX[0]+w/40, _BY[0] + h/20);
+     text("X3:", _BX[1]+w/40, _BY[1] + h/20);
+     text("X2:", _BX[2]+w/40, _BY[2] + h/20);
+     text("X4:", _BX[3]+w/40, _BY[3] + h/20);
+     text(HX[0].toFixed(2), _BX[0]+w/40 + w/20, _BY[0] + h/20);
+     text(HX[1].toFixed(2), _BX[1]+w/40 + w/20, _BY[1] + h/20);
+     text(HX[2].toFixed(2), _BX[2]+w/40 + w/20, _BY[2] + h/20);
+     text(HX[3].toFixed(2), _BX[3]+w/40 + w/20, _BY[3] + h/20);
+
+     text("Y1:", _BX[0]+w/40, _BY[0] + h/10);
+     text("Y3:", _BX[1]+w/40, _BY[1] + h/10);
+     text("Y2:", _BX[2]+w/40, _BY[2] + h/10);
+     text("Y4:", _BX[3]+w/40, _BY[3] + h/10);
+     text(HY[0].toFixed(2), _BX[0]+w/40 + w/20, _BY[0] + h/10);
+     text(HY[1].toFixed(2), _BX[1]+w/40 + w/20, _BY[1] + h/10);
+     text(HY[2].toFixed(2), _BX[2]+w/40 + w/20, _BY[2] + h/10);
+     text(HY[3].toFixed(2), _BX[3]+w/40 + w/20, _BY[3] + h/10);
+
+     input.innerHTML = HY[0].toFixed(2).toString()+'<P>'+
+                       HY[2].toFixed(2).toString()+'<P>'+
+                       HY[1].toFixed(2).toString()+'<P>'+
+                       HY[3].toFixed(2).toString();
+  }
+
+   var HZ = [0,0,0,0];
+   // var H = [[2,-2,1,1],
+   //          [-3,3,-2,-1],
+   //          [0,0,1,0],
+   //          [1,0,0,0]];  //origin
+
+   var H = [[2,1,-2,1],
+            [-3,-2,3,-1],
+            [0,1,0,0],
+            [1,0,0,0]]
+
+  hermitecurve.animate = function() {
+     var w = width(), h = height();
+     var X = w/2, Y = h/2, W = w/2;
+     var s = w / 1.1, t = h / 1.1;
+
+     drawRect(1,  1,   s, t);
+     for(var i = 0;i<4;i++){
+         HZ[i] = 0;
+         for(var j = 0;j<4;j++){
+            HZ[i] += H[i][j] * HY[j];
+         }
+
+      }
+      for(var xi = 0;xi<.95;xi+=.1){
+         yi   = HZ[0]*xi**3 + HZ[1]*xi**2 + HZ[2]*xi +HZ[3];
+         xi_1 = xi+.1;
+         yi_1 = HZ[0]*xi_1**3 + HZ[1]*xi_1**2 + HZ[2]*xi_1 +HZ[3];
+         line(1+xi*s,h-1-yi*t - .09 * t, 1+xi_1*s, h-1-yi_1*t - .09 * t);
+      
+      }
+     output.innerHTML = 'a = '+HZ[0].toFixed(2).toString()+'<P>'+
+                        'b = '+HZ[1].toFixed(2).toString()+'<P>'+
+                        'c = '+HZ[2].toFixed(2).toString()+'<P>'+
+                        'd = '+HZ[3].toFixed(2).toString();
+  }
+
+
+</script>
+
+<hr>
+
+
+</td></tr></table></center>
+
+
